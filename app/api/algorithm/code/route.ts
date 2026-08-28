@@ -50,6 +50,13 @@ export async function POST(request: Request) {
 코드는 그대로 컴파일/실행 가능한 수준이어야 하며, 핵심 로직에 짧은 한국어 주석을 답니다. 코드 외의 설명은 포함하지 마세요.`,
   )
 
+  if (result.status === 'rate-limited') {
+    return jsonError(
+      429,
+      'RATE_LIMITED',
+      '요청이 몰려 잠시 지연되고 있습니다. 잠시 후 다시 시도해주세요.',
+    )
+  }
   if (result.status === 'failed' || !result.data.code) {
     return jsonError(
       502,

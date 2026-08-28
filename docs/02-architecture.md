@@ -25,7 +25,7 @@ Route Handler는 Next.js App Router 방식(`app/api/*/route.ts`)을 쓴다:
 `lib/ai.ts`에 세 라우트가 공유하는 `MODEL`(`anthropic/claude-sonnet-5`), `CATALOG_ID_LIST`(프롬프트에 넣는 카탈로그 id 목록 문자열), `generatePartialSafe`(아래 §3.2 참고)를 모아 중복을 없앴다.
 
 각 라우트는:
-1. 입력 검증(빈 값, 유효 알고리즘 목록 대조, 무의미한 텍스트, 글자 수 등)을 **AI 호출 전에** 서버에서도 한 번 더 수행한다(클라이언트 검증 우회 방지). `/api/algorithm`은 빈 값은 400, 카탈로그에 없는 이름은 404 + 유사 후보를 반환하고, `/api/problem`은 빈 값·1000자 초과(`TOO_LONG`)·무의미한 텍스트(`lib/validation.ts`의 `hasMeaningfulContent`)를 모두 400으로 반환한다 — 전부 AI 호출 없이 즉시 응답한다.
+1. 입력 검증(빈 값, 유효 알고리즘 목록 대조, 무의미한 텍스트, 글자 수 등)을 **AI 호출 전에** 서버에서도 한 번 더 수행한다(클라이언트 검증 우회 방지). `/api/algorithm`은 빈 값은 400, 카탈로그에 없는 이름은 404 + 유사 후보를 반환하고, `/api/problem`은 빈 값·3000자 초과(`TOO_LONG`)·무의미한 텍스트(`lib/validation.ts`의 `hasMeaningfulContent`)를 모두 400으로 반환한다 — 전부 AI 호출 없이 즉시 응답한다.
 2. `generatePartialSafe`(내부적으로 `generateObject`를 감쌈)로 AI 호출, Zod 스키마로 파싱.
 3. 실패 시 에러 코드를 포함한 JSON을 반환해 프론트엔드가 5장의 상태 문구와 매핑할 수 있게 한다. 세 라우트가 실제로 반환하는 코드: `INVALID_INPUT`(400, 공통) / `NOT_FOUND`(404, `/api/algorithm`·`/api/algorithm/code`, `suggestions` 동봉은 전자만) / `MEANINGLESS_INPUT`(400, `/api/problem`만) / `TOO_LONG`(400, `/api/problem`만) / `UPSTREAM_ERROR`(502, AI 호출이 완전히 실패했을 때 — 인증 오류든 부분 파싱조차 실패했든 전부 여기로 뭉뚱그린다). 별도의 `TIMEOUT` 코드는 서버에 없다 — 타임아웃은 클라이언트가 `AbortController`로 직접 만들어내는 상태이지 서버 응답 코드가 아니기 때문이다(§4 참고).
 
@@ -118,7 +118,7 @@ export const ProblemAnalysisSchema = z.object({
 ## 5. 검증/보안
 
 - XSS(5.14)는 React의 기본 이스케이프에 의존한다. `dangerouslySetInnerHTML`은 코드베이스 어디에도 사용하지 않는다(코드 블록도 `<pre><code>{text}</code></pre>` 형태의 텍스트 렌더링만 사용). 별도 검증 없이도 이미 만족되지만, Sprint 4에서 악성 입력을 실제로 넣어보고 최종 확인한다.
-- 서버 측 재검증은 `/api/algorithm`(빈 값→400, 카탈로그 불일치→404)과 `/api/problem`(빈 값→400, 1000자 초과→400 `TOO_LONG`, 무의미한 텍스트→400) 둘 다 구현되어 있다(클라이언트를 우회해 API를 직접 호출해도 동일하게 막힌다). 클라이언트 쪽 글자 수 카운터·버튼 비활성화(5.13)도 `lib/request-timing.ts`의 `MAX_PROBLEM_LENGTH`(1000)를 공유해서 구현했다.
+- 서버 측 재검증은 `/api/algorithm`(빈 값→400, 카탈로그 불일치→404)과 `/api/problem`(빈 값→400, 3000자 초과→400 `TOO_LONG`, 무의미한 텍스트→400) 둘 다 구현되어 있다(클라이언트를 우회해 API를 직접 호출해도 동일하게 막힌다). 클라이언트 쪽 글자 수 카운터·버튼 비활성화(5.13)도 `lib/request-timing.ts`의 `MAX_PROBLEM_LENGTH`(3000, 2026-08-29 1000→3000 상향)를 공유해서 구현했다.
 
 ## 6. 배포
 

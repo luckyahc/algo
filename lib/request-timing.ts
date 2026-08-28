@@ -7,4 +7,4 @@ export const SLOW_AFTER_MS = 4000
 // 계속 타임아웃으로 끊겨 버려서 120초로 올렸다.
 export const REQUEST_TIMEOUT_MS = 120000
 // PRD 5.13: 문제 검색란의 최대 글자 수.
-export const MAX_PROBLEM_LENGTH = 1000
+export const MAX_PROBLEM_LENGTH = 3000

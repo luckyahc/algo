@@ -37,7 +37,13 @@ type Tab = 'algorithm' | 'problem'
 
 // 요청이 실제로 어느 단계에 있는지. UI에 바로 노출되는 상태는 아니다 —
 // 오프라인/입력오류와 조합해 아래 getDisplay()가 최종 표시 상태를 계산한다 (PRD 5.18).
-type RequestPhase = 'idle' | 'loading' | 'timeout' | 'server-error' | 'success'
+type RequestPhase =
+  | 'idle'
+  | 'loading'
+  | 'timeout'
+  | 'server-error'
+  | 'rate-limited'
+  | 'success'
 
 type InputError = { title: string; description: string }
 
@@ -119,7 +125,7 @@ export default function Home() {
           setRequestPhase('idle')
           return
         }
-        setRequestPhase('server-error')
+        setRequestPhase(res.status === 429 ? 'rate-limited' : 'server-error')
         return
       }
       const data = (await res.json()) as AlgorithmResultData
@@ -237,7 +243,7 @@ export default function Home() {
           setRequestPhase('idle')
           return
         }
-        setRequestPhase('server-error')
+        setRequestPhase(res.status === 429 ? 'rate-limited' : 'server-error')
         return
       }
       const data = (await res.json()) as ProblemResultData
@@ -295,6 +301,7 @@ export default function Home() {
     if (isOffline) return { kind: 'offline' as const }
     if (requestPhase === 'loading') return { kind: 'loading' as const }
     if (requestPhase === 'timeout') return { kind: 'timeout' as const }
+    if (requestPhase === 'rate-limited') return { kind: 'rate-limited' as const }
     if (requestPhase === 'server-error') return { kind: 'server-error' as const }
     if (requestPhase === 'success') return { kind: 'success' as const }
     return { kind: 'idle' as const }
@@ -310,6 +317,7 @@ export default function Home() {
       ? '예상보다 시간이 걸리고 있어요. 계속 기다리는 중입니다'
       : '답변을 생성하는 중입니다...',
     timeout: '응답 시간 초과',
+    'rate-limited': '요청 폭주로 지연 중',
     'server-error': '오류 발생',
     success: '결과 표시됨',
   }
@@ -320,6 +328,7 @@ export default function Home() {
     offline: 'bg-muted-foreground',
     loading: 'bg-medium-foreground animate-pulse',
     timeout: 'bg-destructive',
+    'rate-limited': 'bg-medium-foreground',
     'server-error': 'bg-destructive',
     success: 'bg-easy-foreground',
   }
@@ -474,6 +483,16 @@ export default function Home() {
             <ErrorState
               title="응답 시간이 초과되었습니다"
               message="다시 시도해주세요."
+              onRetry={() => {
+                if (lastAction.current) lastAction.current()
+                else setRequestPhase('idle')
+              }}
+            />
+          )}
+          {display.kind === 'rate-limited' && (
+            <ErrorState
+              title="요청이 몰려 잠시 지연되고 있어요"
+              message="Google AI 쪽 요청이 많은 상태입니다. 잠시 후 다시 시도해주세요."
               onRetry={() => {
                 if (lastAction.current) lastAction.current()
                 else setRequestPhase('idle')

@@ -71,6 +71,13 @@ export async function POST(request: Request) {
 ${CATALOG_ID_LIST}`,
   )
 
+  if (result.status === 'rate-limited') {
+    return jsonError(
+      429,
+      'RATE_LIMITED',
+      '요청이 몰려 잠시 지연되고 있습니다. 잠시 후 다시 시도해주세요.',
+    )
+  }
   if (result.status === 'failed') {
     return jsonError(
       502,

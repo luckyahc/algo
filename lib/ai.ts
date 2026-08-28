@@ -1,5 +1,5 @@
 import { google } from '@ai-sdk/google'
-import { generateObject, NoObjectGeneratedError } from 'ai'
+import { APICallError, generateObject, NoObjectGeneratedError, RetryError } from 'ai'
 import type { z } from 'zod'
 import { ALGORITHM_CATALOG } from '@/lib/algorithm-catalog'
 
@@ -20,7 +20,19 @@ export const CATALOG_ID_LIST = ALGORITHM_CATALOG.map(
 export type GenerationResult<T> =
   | { status: 'ok'; data: T }
   | { status: 'partial'; data: Partial<T> }
+  | { status: 'rate-limited' }
   | { status: 'failed' }
+
+// generateObject가 재시도(기본 2회)를 전부 소진하면 RetryError로 감싸서 던진다.
+// 그 안의 마지막 시도(lastError)나, 재시도 없이 바로 던져진 에러 자체가 APICallError일
+// 수 있다 — 둘 다 뒤져서 실제 HTTP 상태 코드를 꺼낸다 (429 판별용).
+function extractStatusCode(err: unknown): number | undefined {
+  if (APICallError.isInstance(err)) return err.statusCode
+  if (RetryError.isInstance(err) && APICallError.isInstance(err.lastError)) {
+    return err.lastError.statusCode
+  }
+  return undefined
+}
 
 /**
  * generateObject를 호출하되, 스키마 검증에 완전히 실패해도 바로 포기하지 않는다.
@@ -54,6 +66,10 @@ export async function generatePartialSafe<Schema extends z.ZodObject<z.ZodRawSha
       } catch {
         // 모델이 준 텍스트조차 JSON이 아니었다 — 건질 것이 없다.
       }
+    }
+    if (extractStatusCode(err) === 429) {
+      console.error('[generatePartialSafe] rate limited', err)
+      return { status: 'rate-limited' }
     }
     console.error('[generatePartialSafe] generation failed', err)
     return { status: 'failed' }
