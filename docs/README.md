@@ -27,7 +27,9 @@ PRD가 요구사항의 원본(source of truth)이며, 이 문서들은 그것을
 
 **Sprint 5(통합 QA)**에서 실제 버그를 하나 발견해 고쳤다: `app/page.tsx`에 React 에러 바운더리가 없어 결과 렌더링 중 오류가 나면 헤더·입력창까지 통째로 죽을 수 있었다 — `components/result-error-boundary.tsx`를 추가해 결과 영역만 격리했다(Done Criteria #6).
 
-**남은 병목은 사용자 본인의 Vercel 로그인**(OAuth는 에이전트가 대신할 수 없음, CLI 설치까지만 완료). 브라우저 육안 QA는 2026-08-29에 **사용자 판단으로 더 이상 열린 작업으로 취급하지 않기로 했다** — 코드·API 레벨 검증으로 충분하다고 보기로 함(**Sprint 6**, `04-exception-checklist.md` 참고). 실제로 화면에서 재확인했다는 뜻은 아니다.
+브라우저 육안 QA는 2026-08-29에 **사용자 판단으로 더 이상 열린 작업으로 취급하지 않기로 했다** — 코드·API 레벨 검증으로 충분하다고 보기로 함(**Sprint 6**, `04-exception-checklist.md` 참고). 실제로 화면에서 재확인했다는 뜻은 아니다.
+
+**2026-08-29: 프로덕션 배포 완료.** CLI가 이미 로그인돼 있어 `vercel link` → 환경변수 등록(`GOOGLE_GENERATIVE_AI_API_KEY`) → 프리뷰 배포 검증 → `vercel deploy --prod` 순으로 진행, `https://algo-nine-pink.vercel.app`에서 실제 AI 응답까지 확인했다. **남은 유일한 병목은 GitHub 자동 배포 연동**(push 시 자동 재배포) — Vercel 계정에 GitHub 로그인 연결이 없어 `vercel git connect`가 막힘, 사용자가 대시보드에서 직접 연결해야 한다.
 
 **알고리즘 카탈로그를 두 차례 대폭 확장했다(Sprint 7~8).** 기초 82개 → QOJ(ICPC/IOI/CCPC/Petrozavodsk 수준) 고급 알고리즘 143개 추가(225개) → 사용자가 제시한 USACO Guide류 종합 커리큘럼 병합 48개 추가, 현재 **273개**, 16개 카테고리(기초/기하/다항식/게임이론 신설). LeetCode식 문제 유형 태그(SQL, 동시성 프로그래밍 등)와 순수 학문 분야명은 "알고리즘"이 아니라서 제외했다. id·이름·별칭 전수 중복 검사 통과, 신규 항목(세그먼트 트리 비츠, 데카르트 트리)으로 실제 AI 호출까지 확인.
 

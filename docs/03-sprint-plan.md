@@ -132,9 +132,9 @@
 - [x] **5.7(부분 파싱 복구) 실측**(2026-08-29): 실제 AI가 스키마를 깨는 사례는 여전히 관찰 못 했지만, `generatePartialSafe`의 필드 단위 salvage 로직 자체를 손상된 응답을 흉내낸 데이터로 독립 검증했다 — description/difficulty/difficultyReason/useCases는 정상, `code`는 스키마 위반(빈 문자열), `related`는 필드 누락인 입력을 넣었을 때, 정상 필드 4개만 정확히 살아남고 나머지 2개는 `undefined`로 빠지는 것을 6개 항목 전부 PASS로 확인. 이 결과가 route.ts에서 병합되면 화면은 `code`/`related`만 `MISSING_FIELD_PLACEHOLDER`로 보여준다.
 - [ ] **출력 품질 점검**: 관찰된 응답 중 `difficultyReason`에 "구현할 me 수 있습니다"처럼 사소한 언어 혼입 오타가 한 번 있었다. 반복되는지 몇 차례 더 호출해 지켜보고, 자주 발생하면 프롬프트에 "정확한 한국어로만 작성" 같은 지침을 보강하는 것을 고려. 지금 당장 조치가 필요한 수준은 아님(스키마 검증은 통과, 사용성에 큰 지장 없음) — 계속 지켜보는 항목이라 열어둠.
 - [x] **레이트리밋/할당량 대응 검토**(2026-08-29): `lib/ai.ts`에 `extractStatusCode`(APICallError/RetryError에서 실제 HTTP 상태 꺼내기) 추가, `generatePartialSafe`가 429를 감지하면 `'rate-limited'` 상태를 반환하도록 `GenerationResult`에 새 케이스 추가. 세 라우트(`/api/algorithm`, `/api/problem`, `/api/algorithm/code`) 전부 429를 `RATE_LIMITED` 코드로 구분 응답. `page.tsx`에도 `rate-limited` 전용 `RequestPhase`/`display.kind`를 추가해 "요청이 몰려 잠시 지연되고 있어요" 전용 안내 + 재시도 버튼을 보여준다(기존 502 뭉뚱그림과 분리됨). `tsc`/`build` 통과, 기존 400/404 회귀 테스트 이상 없음 확인. 실제 429를 인위적으로 재현하지는 못했다(짧은 시간에 그만큼 많은 요청을 보내야 함) — 코드 경로는 완비, 실전 트래픽에서 발동 여부는 계속 지켜볼 것.
-- [ ] **Vercel 배포**: `GOOGLE_GENERATIVE_AI_API_KEY`를 Vercel 프로젝트 환경변수로 등록하고 배포 — Sprint 5에서 막혔던 부분과 동일(사용자의 `vercel login` 필요). **유일하게 남은 항목.**
+- [x] **Vercel 배포**(2026-08-29): CLI가 이미 `anhoonchan-8770` 계정으로 로그인돼 있음을 확인(과거 "로그인 필요해 차단" 메모는 낡은 정보였음). `vercel link --yes`로 기존 프로젝트(`anhoonchan-8770/algo`)에 연결, `vercel env add GOOGLE_GENERATIVE_AI_API_KEY`로 Production/Preview 환경변수 등록, 프리뷰 배포(`vercel`) 후 실제 API 호출로 검증(유니온 파인드 → 200, 완결된 스키마 응답), 이상 없어 `vercel deploy --prod`로 프로덕션 승격. 프로덕션 URL(`https://algo-nine-pink.vercel.app`)에서도 실제 API 재확인(퀵 정렬 → 200). GitHub 자동 배포(push 시 자동 재배포)는 `vercel git connect` 시도 결과 "Vercel 계정에 GitHub 로그인 연결 필요"(400 에러)로 막힘 — 이건 사용자가 Vercel 대시보드에서 직접 GitHub 계정을 연결해야 하는 절차라 에이전트가 대신할 수 없다. 그 전까지는 배포가 필요할 때마다 `vercel deploy --prod`를 수동 실행.
 
-**완료 기준(2026-08-29 기준 재평가)**: 브라우저 재현 요건은 제외됐고, 5.4/5.5/5.7 실측은 완료됐다. 남은 건 출력 품질 계속 관찰(경미, 열어둠)과 Vercel 배포(사용자 로그인 필요) 두 가지뿐이다.
+**완료 기준(2026-08-29 최종)**: 브라우저 재현 요건 제외, 5.4/5.5/5.7 실측 완료, 레이트리밋 대응 구현, **프로덕션 배포 완료**. 남은 건 출력 품질 계속 관찰(경미, 열어둠)과 GitHub 자동 배포 연동(사용자의 Vercel↔GitHub 계정 연결 필요) 두 가지뿐이다.
 
 ---
 
