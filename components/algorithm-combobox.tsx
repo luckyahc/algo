@@ -11,12 +11,15 @@ export function AlgorithmCombobox({
   onSelect,
   onSubmit,
   disabled,
+  highlightError,
 }: {
   value: string
   onValueChange: (value: string) => void
   onSelect: (entry: CatalogEntry) => void
   onSubmit: (rawQuery: string) => void
   disabled?: boolean
+  /** PRD 5.1: 빈 입력으로 검색 시도 시 포커스 이동 + 테두리 강조. */
+  highlightError?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
@@ -37,6 +40,10 @@ export function AlgorithmCombobox({
   useEffect(() => {
     setActive(0)
   }, [value])
+
+  useEffect(() => {
+    if (highlightError) inputRef.current?.focus()
+  }, [highlightError])
 
   useEffect(() => {
     const el = listRef.current?.querySelector<HTMLElement>(
@@ -94,7 +101,12 @@ export function AlgorithmCombobox({
             onFocus={() => setOpen(true)}
             onKeyDown={onKeyDown}
             placeholder="알고리즘 이름을 입력하세요 (예: 이진 탐색, DFS, 다익스트라)"
-            className="h-12 w-full rounded-xl border border-border bg-card pl-11 pr-4 text-sm text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
+            className={cn(
+              'h-12 w-full rounded-xl border bg-card pl-11 pr-4 text-sm text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60',
+              highlightError
+                ? 'border-medium focus:border-medium focus:ring-medium/30'
+                : 'border-border focus:border-ring focus:ring-ring/30',
+            )}
             role="combobox"
             aria-expanded={open}
             aria-controls="algo-listbox"

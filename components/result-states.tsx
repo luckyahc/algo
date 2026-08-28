@@ -1,6 +1,6 @@
 'use client'
 
-import { AlertTriangle, RotateCw, SearchX, TerminalSquare } from 'lucide-react'
+import { AlertTriangle, RotateCw, SearchX, TerminalSquare, WifiOff } from 'lucide-react'
 
 export function IdleState() {
   return (
@@ -75,18 +75,24 @@ export function InvalidInputState({
   )
 }
 
-export function ErrorState({ onRetry }: { onRetry: () => void }) {
+export function ErrorState({
+  title = '결과를 불러오지 못했어요',
+  message = '일시적인 문제가 발생했습니다. 잠시 후 다시 시도해주세요.',
+  onRetry,
+}: {
+  title?: string
+  message?: string
+  onRetry: () => void
+}) {
   return (
     <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-destructive/30 bg-destructive/5 px-6 py-16 text-center">
       <div className="flex size-16 items-center justify-center rounded-2xl bg-destructive/10">
         <AlertTriangle className="size-8 text-destructive" />
       </div>
       <div className="flex flex-col gap-1.5">
-        <p className="text-base font-semibold text-foreground">
-          결과를 불러오지 못했어요
-        </p>
+        <p className="text-base font-semibold text-foreground">{title}</p>
         <p className="max-w-sm text-pretty text-sm leading-relaxed text-muted-foreground">
-          일시적인 문제가 발생했습니다. 잠시 후 다시 시도해주세요.
+          {message}
         </p>
       </div>
       <button
@@ -97,6 +103,26 @@ export function ErrorState({ onRetry }: { onRetry: () => void }) {
         <RotateCw className="size-4" />
         다시 시도
       </button>
+    </div>
+  )
+}
+
+// PRD 5.12: 오프라인일 때는 재시도 버튼 없이 상태만 알린다 — 재연결은 사용자가
+// 직접 다시 검색해서 확인한다(자동 재요청 없음).
+export function OfflineState() {
+  return (
+    <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-border bg-card/40 px-6 py-16 text-center">
+      <div className="flex size-16 items-center justify-center rounded-2xl bg-secondary">
+        <WifiOff className="size-8 text-muted-foreground" />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <p className="text-base font-semibold text-foreground">
+          인터넷 연결을 확인해주세요
+        </p>
+        <p className="max-w-sm text-pretty text-sm leading-relaxed text-muted-foreground">
+          연결이 복구되면 다시 검색해주세요.
+        </p>
+      </div>
     </div>
   )
 }

@@ -54,21 +54,22 @@
 
 ---
 
-## Sprint 3 — 예외 처리 전면 구현 (PRD 5장)
+## Sprint 3 — 예외 처리 전면 구현 (PRD 5장) ✅ 코드 완료 · ⚠️ 일부 육안 미검증 (2026-08-28)
 
 **목표**: `04-exception-checklist.md`의 남은 모든 항목. Done Criteria #4, #6.
 
 **작업**
-- [ ] 상태 표시줄을 `02-architecture.md` §4의 단일 상태 머신으로 리팩터링 (우선순위 규칙 5.18 포함)
-- [ ] 5.1 빈 입력, 5.13 글자 수 제한(카운터+버튼 비활성화) 구현
-- [ ] 5.4/5.5 지연(3~5초)·타임아웃(15~20초) 타이머 + `AbortController` 구현, "다시 시도" 버튼 연결
-- [ ] 5.6 네트워크/서버 오류 처리 + 무제한 재시도
-- [ ] 5.7 부분 파싱 실패 시 있는 필드만 표시 + 없는 필드 플레이스홀더
-- [ ] 5.11 로딩 중 모든 검색/버튼 클릭 차단 재검증(이미 있는 disable 로직 감사)
-- [ ] 5.12 온라인/오프라인 이벤트 감지 + 문구 전환
-- [ ] 5.19 언어별 코드 개별 실패 표시 + 탭 내 재시도 아이콘 (`app/api/algorithm/code` 라우트 연동)
+- [x] 상태 표시줄을 `02-architecture.md` §4의 단일 상태 머신으로 리팩터링: `inputError` / `isOffline` / `requestPhase` / `isSlow` 네 가지 원시 상태를 `getDisplay()` 순수 함수 하나가 우선순위(입력오류 > 오프라인 > 로딩/지연 > 타임아웃/서버오류 > 성공)대로 조합해 항상 하나의 표시 상태만 반환 (5.18)
+- [x] 5.1 빈 입력: 상태 표시줄에 전용 문구 + 콤보박스/텍스트박스 테두리 강조 + 자동 포커스(`highlightError` prop, `problemTextareaRef`)
+- [x] 5.13 글자 수 제한: 문제 텍스트박스 하단 `OOO/1000자` 카운터, 초과 시 경고색 + 검색 버튼 비활성화, `/api/problem`도 1000자 초과를 서버에서 별도로 재검증(`TOO_LONG`)
+- [x] 5.4/5.5 지연(4초)·타임아웃(18초) 타이머 + `AbortController` 구현(`lib/request-timing.ts`), 지연 시 상태 문구만 갱신하고 요청은 계속 진행, 타임아웃 시 abort 후 전용 재시도 화면 표시
+- [x] 5.6 네트워크/서버 오류 처리 + 무제한 재시도: `ErrorState`의 재시도 버튼이 `lastAction` ref를 다시 호출, 횟수 제한 없음
+- [x] 5.7 부분 파싱 실패 시 있는 필드만 표시: `lib/ai.ts`의 `generatePartialSafe`가 `NoObjectGeneratedError.text`를 다시 JSON 파싱해 **필드 단위로 개별 검증**, 통과한 필드만 살리고 나머지는 `null`로 응답 → 컴포넌트가 `MISSING_FIELD_PLACEHOLDER`("이 항목은 준비되지 않았습니다.")로 대체 렌더링. `AlgorithmResultData`/`ProblemResultData`의 관련 필드를 전부 nullable로 재정의
+- [x] 5.11 로딩 중 모든 검색/버튼 클릭 차단: 콤보박스·텍스트박스·검색 버튼에 더해, 로딩 중 **탭 전환도 차단**하도록 새로 추가(전환을 허용하면 요청이 끝났을 때 엉뚱한 탭에 결과가 표시되는 버그가 있어 막음)
+- [x] 5.12 온라인/오프라인 이벤트 감지 + 문구 전환: `window`의 `online`/`offline` 리스너로 `isOffline` 갱신, `OfflineState` 컴포넌트 추가, 재연결 시 자동 재요청 없이 안내만 사라짐
+- [x] 5.19 언어별 코드 개별 실패 표시 + 탭 내 재시도 아이콘: `app/api/algorithm/code/route.ts` 신설, `LanguageTabs`에 재시도 버튼(스피너 포함) 추가, 성공 시 `algoResult.code`의 해당 언어만 갱신
 
-**완료 기준**: 체크리스트 19개 항목을 각각 의도적으로 재현했을 때 PRD가 명시한 문구/동작이 정확히 나타난다.
+**완료 기준 검증 상태**: `tsc --noEmit`/`pnpm build` 통과. node fetch로 `/api/algorithm/code`(값 누락→400, 무효 id→404, 유효 요청→AI 호출 시도), `/api/problem`의 1000자 초과(→400 `TOO_LONG`) 모두 확인. **AI_GATEWAY_API_KEY가 없어 5.4(지연 문구 전환)·5.5(실제 18초 타임아웃)·5.7(진짜 부분 파싱 상황)·5.19(재시도 성공)는 실제 AI 트래픽으로는 아직 재현/육안 검증하지 못했다** — 로직과 배선만 확인됨. 5.12(오프라인)는 브라우저 devtools로 별도 재현 필요.
 
 ---
 

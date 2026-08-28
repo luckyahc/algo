@@ -2,7 +2,7 @@
 
 이 문서는 스프린트 전반에서 따를 기술 결정을 정리한다. PRD는 "무엇을"만 규정하므로, "어떻게"는 여기서 확정한다. `(구현됨)` 표시가 없는 항목은 아직 계획 단계다.
 
-> 2026-08-28 갱신: Sprint 0~2에서 §1(AI 연동), §2(`/api/algorithm`·`/api/problem` 둘 다), §3(두 스키마 모두)이 실제로 구현되었다. 실제 코드와 다르게 남아 있던 부분(패키지 버전, 스키마 필드 구성)을 이 문서에서 바로잡았다. §4의 상태 머신 리팩터링과 `/api/algorithm/code`(5.19 부분 재시도)는 Sprint 3에서 아직 손대지 않았다.
+> 2026-08-28 갱신: Sprint 0~3에서 이 문서가 계획했던 것이 사실상 전부 구현되었다 — §1(AI 연동), §2(세 라우트 모두), §3(두 스키마 모두 + partial 복구), §4(상태 머신)까지. 실제 코드와 다르게 남아 있던 부분을 이 문서에서 바로잡았다. 아직 안 한 것은 §5의 XSS 육안 검증(Sprint 4)과 §6의 실제 배포(Sprint 5)뿐이다.
 
 ## 1. AI 연동 방식 (구현됨)
 
@@ -17,14 +17,14 @@ Route Handler는 Next.js App Router 방식(`app/api/*/route.ts`)을 쓴다:
 
 - `POST /api/algorithm` — `{ name: string }` → `AlgorithmDetail` **(구현됨)**
 - `POST /api/problem` — `{ description: string }` → `ProblemAnalysis` **(구현됨)**
-- `POST /api/algorithm/code` — `{ algorithmId: string, lang: string }` → 언어 1개 코드만 재생성 (5.19 부분 재시도용, Sprint 3 예정, 아직 없음)
+- `POST /api/algorithm/code` — `{ algorithmId: string, lang: string }` → 언어 1개 코드만 재생성 (5.19 부분 재시도용) **(구현됨, Sprint 3)**
 
-`lib/ai.ts`에 두 라우트가 공유하는 `MODEL`(`anthropic/claude-sonnet-5`)과 `CATALOG_ID_LIST`(프롬프트에 넣는 카탈로그 id 목록 문자열)를 모아 중복을 없앴다.
+`lib/ai.ts`에 세 라우트가 공유하는 `MODEL`(`anthropic/claude-sonnet-5`), `CATALOG_ID_LIST`(프롬프트에 넣는 카탈로그 id 목록 문자열), `generatePartialSafe`(아래 §3.2 참고)를 모아 중복을 없앴다.
 
 각 라우트는:
-1. 입력 검증(빈 값, 유효 알고리즘 목록 대조, 무의미한 텍스트 등)을 **AI 호출 전에** 서버에서도 한 번 더 수행한다(클라이언트 검증 우회 방지). `/api/algorithm`은 빈 값은 400, 카탈로그에 없는 이름은 404 + 유사 후보를 반환하고, `/api/problem`은 빈 값·무의미한 텍스트(`lib/validation.ts`의 `hasMeaningfulContent`)를 모두 400으로 반환한다 — 둘 다 AI 호출 없이 즉시 응답한다.
-2. `generateObject`로 AI 호출, Zod 스키마로 파싱.
-3. 실패 시 에러 코드를 포함한 JSON을 반환해 프론트엔드가 5장의 상태 문구와 매핑할 수 있게 한다. 현재 두 라우트가 실제로 반환하는 코드는 `INVALID_INPUT`(400) / `NOT_FOUND`(404, `/api/algorithm`만, `suggestions` 동봉) / `MEANINGLESS_INPUT`(400, `/api/problem`만) / `UPSTREAM_ERROR`(502, AI 호출 실패·인증 오류 등을 모두 뭉뚱그림)다. `TIMEOUT`과 `PARSE_ERROR`를 별도 코드로 분리해 5.5(타임아웃)·5.7(부분 파싱 실패)에 맞게 세분화하는 작업은 아직 하지 않았다 — Sprint 3에서 처리.
+1. 입력 검증(빈 값, 유효 알고리즘 목록 대조, 무의미한 텍스트, 글자 수 등)을 **AI 호출 전에** 서버에서도 한 번 더 수행한다(클라이언트 검증 우회 방지). `/api/algorithm`은 빈 값은 400, 카탈로그에 없는 이름은 404 + 유사 후보를 반환하고, `/api/problem`은 빈 값·1000자 초과(`TOO_LONG`)·무의미한 텍스트(`lib/validation.ts`의 `hasMeaningfulContent`)를 모두 400으로 반환한다 — 전부 AI 호출 없이 즉시 응답한다.
+2. `generatePartialSafe`(내부적으로 `generateObject`를 감쌈)로 AI 호출, Zod 스키마로 파싱.
+3. 실패 시 에러 코드를 포함한 JSON을 반환해 프론트엔드가 5장의 상태 문구와 매핑할 수 있게 한다. 세 라우트가 실제로 반환하는 코드: `INVALID_INPUT`(400, 공통) / `NOT_FOUND`(404, `/api/algorithm`·`/api/algorithm/code`, `suggestions` 동봉은 전자만) / `MEANINGLESS_INPUT`(400, `/api/problem`만) / `TOO_LONG`(400, `/api/problem`만) / `UPSTREAM_ERROR`(502, AI 호출이 완전히 실패했을 때 — 인증 오류든 부분 파싱조차 실패했든 전부 여기로 뭉뚱그린다). 별도의 `TIMEOUT` 코드는 서버에 없다 — 타임아웃은 클라이언트가 `AbortController`로 직접 만들어내는 상태이지 서버 응답 코드가 아니기 때문이다(§4 참고).
 
 ## 3. 데이터 스키마
 
@@ -69,6 +69,8 @@ const AlgorithmDetailSchema = z.object({
 
 `code`의 각 언어 필드는 `nullable`로 두어, 5.19(언어별 부분 실패)를 "필드가 없으면 그 탭만 실패로 표시"로 자연스럽게 처리한다. `related`는 라우트 핸들러가 응답 직후 카탈로그에 존재하지 않는 id와 자기 자신의 id를 필터링한다(5.9, 5.10) — 클라이언트도 렌더링 시 방어적으로 한 번 더 필터링한다.
 
+**5.7(부분 파싱 실패) — `generatePartialSafe`(`lib/ai.ts`, Sprint 3에서 추가)**: `generateObject`가 스키마 검증에 완전히 실패해도(AI SDK의 `NoObjectGeneratedError`) 바로 502로 포기하지 않는다. 에러가 들고 있는 원문(`err.text`)을 다시 JSON으로 파싱한 뒤, **필드 하나하나를 그 필드의 Zod 스키마로 개별 검증**해 통과하는 필드만 건진다(전체를 한 번에 `.partial().safeParse()`하면 필드 하나가 깨졌을 때 전부 실패로 취급되어 버리므로 반드시 필드 단위로 나눠 검사한다). 이 때문에 실제 wire 타입(`AlgorithmResultData`)은 `AlgorithmDetail`을 그대로 쓰지 않고 `description`/`difficulty`/`difficultyReason`/`useCases`를 전부 `| null`로 다시 정의했다 — 살아남지 못한 필드는 `null`로 내려가고, 컴포넌트가 `MISSING_FIELD_PLACEHOLDER`("이 항목은 준비되지 않았습니다.")로 대체 렌더링한다.
+
 ### 3.3 문제 분석 (AI 생성, Zod 스키마) — 구현됨
 
 `lib/schemas.ts`에 정의는 이미 있다. 계획과 달라진 점: 문제 설명(`description`)은 AI가 다시 만들지 않고 **사용자가 입력한 원문을 그대로 화면에 쓴다** — 재생성하면 사용자가 입력한 문장과 미묘하게 달라질 위험이 있고, 카드에 표시할 값은 어차피 클라이언트가 이미 들고 있기 때문이다. 같은 이유로 `algorithmName`도 스키마에 없다 — `algorithmId`로 카탈로그를 조회해 이름을 얻는다(`getCatalogEntry`).
@@ -90,17 +92,25 @@ export const ProblemAnalysisSchema = z.object({
 })
 ```
 
-## 4. 프론트엔드 상태 관리
+여기도 `generatePartialSafe`를 거친다(위 §3.2 참고). `ProblemResultData`의 `difficulty`/`difficultyReason`은 `| null`로 정의해 실패 시 placeholder를 보여준다. 다만 `solutions`는 **부분 항목을 만들지 않는다** — 배열 필드 자체가 필드 단위 검증 대상이라, 배열 안의 풀이 하나라도 스키마를 어기면 `solutions` 필드 전체가 통째로 탈락한다(빈 배열 취급). 풀이 하나만 절반만 채워진 상태로 보여주는 것보다, 아예 안 보여주고 5.8("매칭 알고리즘 없음")과 같은 안내로 대체하는 편이 사용자에게 덜 혼란스럽다고 판단했다.
+
+## 4. 프론트엔드 상태 관리 (구현됨, Sprint 3에서 계획대로 리팩터링 완료)
 
 - 별도 상태 관리 라이브러리 없이 `page.tsx`의 React state로 충분하다(단일 화면, DB 없음, 새로고침 시 초기화 원칙과 일치).
-- **현재 상태(Sprint 2까지)**: `type Status = 'idle' | 'loading' | 'success' | 'error' | 'invalid'` 라는 단순한 5분기 enum이다. `invalid`는 탭에 따라 의미가 다르다 — 알고리즘 탭이면 5.3/5.9(카탈로그에 없는 이름), 문제 탭이면 5.2(무의미한 입력)를 표현하며, 화면에는 `InvalidInputState`에 탭별로 다른 문구를 넣어 렌더링한다(`page.tsx`가 `status==='invalid' && tab==='...'` 로 분기). 매칭 알고리즘 없음(5.8)은 오류가 아니라 `success` 상태 안에서 `ProblemResult`가 안내 카드를 그리는 방식으로 처리한다 — 별도 상태를 두지 않았다. 아직 5.4(지연)·5.12(오프라인)처럼 시간이 지나면서 바뀌는 상태나, 우선순위 계산이 필요한 상태는 없다 — 그래서 지금은 이 정도로 충분하다.
-- **계획(Sprint 3에서 리팩터링)**: 5장의 나머지 항목(지연/오프라인/타임아웃 등)이 들어오면 분기가 늘어나 개별 `setStatus` 호출만으로는 우선순위가 꼬이기 쉽다. 그때 `type StatusState = { kind: 'idle' | 'input-error' | 'offline' | 'loading' | 'slow' | 'success' | 'server-error' | 'timeout' | 'invalid', message: string }` 형태로 확장하고, PRD 5.18의 우선순위 규칙(입력검증 > 오프라인 > 로딩/지연 > 서버오류)을 계산하는 **하나의 순수 함수**로 통합한다. 요청 취소/타임아웃은 `AbortController` + `setTimeout`으로 구현(5.5)하고, 지연 문구 전환(5.4)은 별도의 짧은 타이머(3~5초)로 상태 문구만 갱신하며 요청 자체는 계속 진행한다.
-- **언어 탭 선택(구현됨)**: 3.2의 "세션 내 유지" 요구는 `page.tsx` 최상위의 `preferredLang` state(`LanguageKey`, 최초값 `cpp`)로 구현했다. 새 알고리즘 결과를 렌더링할 때마다 이 값을 기본 탭으로 쓴다.
+- **원시 상태 4가지**를 따로 두고, 화면에 보여줄 상태는 매번 그 조합으로 계산한다.
+  - `inputError: { title, description } | null` — 클라이언트 검증 실패(5.1 빈 입력, 5.3 카탈로그 불일치, 5.13 글자 수 초과, 서버가 되돌려준 5.2/5.9 사례 포함). 사용자가 입력을 다시 고치면(`onChange`) 즉시 지운다.
+  - `isOffline: boolean` — `window`의 `online`/`offline` 이벤트로 갱신(5.12).
+  - `requestPhase: 'idle' | 'loading' | 'timeout' | 'server-error' | 'success'` — 진행 중인 요청의 실제 단계.
+  - `isSlow: boolean` — `requestPhase === 'loading'`인 동안 `SLOW_AFTER_MS`(4초, `lib/request-timing.ts`)가 지나면 켜진다(5.4). 요청 자체는 계속 진행된다.
+- **`getDisplay()`**: 이 네 값을 받아 PRD 5.18의 우선순위(1. 입력 검증 오류 > 2. 오프라인 > 3. 로딩/지연 > 4. 타임아웃/서버 오류 > 성공/대기)대로 **항상 하나의 표시 상태만** 반환하는 순수 함수. 여러 조건이 동시에 참이어도(예: 오프라인 상태에서 빈 입력 제출) 이 함수 하나가 어떤 문구를 보여줄지 결정하므로, 여러 곳에서 개별적으로 상태를 set하다가 우선순위가 꼬이는 문제가 생기지 않는다.
+- **타임아웃/재시도(5.5, 5.6)**: 요청마다 새 `AbortController`를 만들고, `REQUEST_TIMEOUT_MS`(18초)가 지나면 abort한다. `catch` 블록에서 "우리가 스스로 abort한 것인지" 여부(`didTimeout` 클로저 변수)로 `timeout`과 `server-error`를 구분한다. 재시도 버튼은 `lastAction` ref에 저장해 둔 마지막 요청 함수를 그대로 다시 호출한다 — 횟수 제한 없음.
+- **로딩 중 잠금(5.11)**: `isBusy = requestPhase === 'loading'`. 검색창·버튼뿐 아니라 **탭 전환(`switchTab`)도** 이 값이 true면 막는다 — `requestPhase`가 두 탭이 공유하는 단일 상태라, 로딩 중 탭을 바꾸면 요청이 끝났을 때 엉뚱한 탭에 결과가 표시될 수 있어서다.
+- **언어 탭 선택(3.2, "세션 내 유지")**: `page.tsx` 최상위의 `preferredLang` state(`LanguageKey`, 최초값 `cpp`)로 구현했다. 새 알고리즘 결과를 렌더링할 때마다 이 값을 기본 탭으로 쓴다.
 
 ## 5. 검증/보안
 
 - XSS(5.14)는 React의 기본 이스케이프에 의존한다. `dangerouslySetInnerHTML`은 코드베이스 어디에도 사용하지 않는다(코드 블록도 `<pre><code>{text}</code></pre>` 형태의 텍스트 렌더링만 사용). 별도 검증 없이도 이미 만족되지만, Sprint 4에서 악성 입력을 실제로 넣어보고 최종 확인한다.
-- 서버 측 재검증은 `/api/algorithm`(빈 값→400, 카탈로그 불일치→404)과 `/api/problem`(빈 값→400, 무의미한 텍스트→400) 둘 다 구현되어 있다(클라이언트를 우회해 API를 직접 호출해도 동일하게 막힌다). **글자 수 제한(5.13)은 클라이언트·서버 어디에도 아직 없다** — Sprint 3에서 함께 구현한다.
+- 서버 측 재검증은 `/api/algorithm`(빈 값→400, 카탈로그 불일치→404)과 `/api/problem`(빈 값→400, 1000자 초과→400 `TOO_LONG`, 무의미한 텍스트→400) 둘 다 구현되어 있다(클라이언트를 우회해 API를 직접 호출해도 동일하게 막힌다). 클라이언트 쪽 글자 수 카운터·버튼 비활성화(5.13)도 `lib/request-timing.ts`의 `MAX_PROBLEM_LENGTH`(1000)를 공유해서 구현했다.
 
 ## 6. 배포
 

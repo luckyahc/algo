@@ -1,12 +1,17 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Binary, Search, SendHorizonal } from 'lucide-react'
 import {
   type CatalogEntry,
   findExactMatch,
   getCatalogEntry,
 } from '@/lib/algorithm-catalog'
+import {
+  MAX_PROBLEM_LENGTH,
+  REQUEST_TIMEOUT_MS,
+  SLOW_AFTER_MS,
+} from '@/lib/request-timing'
 import type {
   AlgorithmResultData,
   LanguageKey,
@@ -21,16 +26,26 @@ import {
   IdleState,
   InvalidInputState,
   LoadingState,
+  OfflineState,
 } from '@/components/result-states'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { cn } from '@/lib/utils'
 
 type Tab = 'algorithm' | 'problem'
-type Status = 'idle' | 'loading' | 'success' | 'error' | 'invalid'
+
+// 요청이 실제로 어느 단계에 있는지. UI에 바로 노출되는 상태는 아니다 —
+// 오프라인/입력오류와 조합해 아래 getDisplay()가 최종 표시 상태를 계산한다 (PRD 5.18).
+type RequestPhase = 'idle' | 'loading' | 'timeout' | 'server-error' | 'success'
+
+type InputError = { title: string; description: string }
+
+const NOT_FOUND_ERROR: InputError = {
+  title: '일치하는 알고리즘을 찾을 수 없어요',
+  description: '위 검색창의 자동완성 목록에서 원하는 알고리즘을 선택해주세요.',
+}
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>('algorithm')
-  const [status, setStatus] = useState<Status>('idle')
   const [query, setQuery] = useState('')
   const [algoResult, setAlgoResult] = useState<AlgorithmResultData | null>(null)
   const [problemResult, setProblemResult] = useState<ProblemResultData | null>(
@@ -39,32 +54,80 @@ export default function Home() {
   const [problemText, setProblemText] = useState('')
   // 최초 진입 시 C++ 기본, 이후 선택한 언어는 세션 동안 유지된다 (PRD 3.2).
   const [preferredLang, setPreferredLang] = useState<LanguageKey>('cpp')
-  const lastAction = useRef<(() => void) | null>(null)
+  const [retryingLang, setRetryingLang] = useState<LanguageKey | null>(null)
 
-  const isLoading = status === 'loading'
+  const [inputError, setInputError] = useState<InputError | null>(null)
+  const [isOffline, setIsOffline] = useState(false)
+  const [requestPhase, setRequestPhase] = useState<RequestPhase>('idle')
+  const [isSlow, setIsSlow] = useState(false)
+
+  const lastAction = useRef<(() => void) | null>(null)
+  const problemTextareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const isBusy = requestPhase === 'loading'
+
+  // PRD 5.12: 온라인/오프라인 이벤트를 구독한다. 재연결되면 안내만 사라질 뿐
+  // 자동으로 재요청하지는 않는다 — 사용자가 직접 다시 시도한다.
+  useEffect(() => {
+    function update() {
+      setIsOffline(!navigator.onLine)
+    }
+    update()
+    window.addEventListener('online', update)
+    window.addEventListener('offline', update)
+    return () => {
+      window.removeEventListener('online', update)
+      window.removeEventListener('offline', update)
+    }
+  }, [])
+
+  // PRD 5.1: 빈 입력으로 검색 시도 시 포커스 이동 + 테두리 강조.
+  useEffect(() => {
+    if (inputError && tab === 'problem') problemTextareaRef.current?.focus()
+  }, [inputError, tab])
+
+  function clearInputError() {
+    if (inputError) setInputError(null)
+  }
 
   async function runAlgorithmFetch(entry: CatalogEntry) {
     lastAction.current = () => runAlgorithmFetch(entry)
-    setStatus('loading')
+    setInputError(null)
+    setIsSlow(false)
+    setRequestPhase('loading')
+
+    const controller = new AbortController()
+    let didTimeout = false
+    const slowTimer = setTimeout(() => setIsSlow(true), SLOW_AFTER_MS)
+    const timeoutTimer = setTimeout(() => {
+      didTimeout = true
+      controller.abort()
+    }, REQUEST_TIMEOUT_MS)
+
     try {
       const res = await fetch('/api/algorithm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: entry.name }),
+        signal: controller.signal,
       })
       if (!res.ok) {
         if (res.status === 404) {
-          setStatus('invalid')
+          setInputError(NOT_FOUND_ERROR)
+          setRequestPhase('idle')
           return
         }
-        setStatus('error')
+        setRequestPhase('server-error')
         return
       }
       const data = (await res.json()) as AlgorithmResultData
       setAlgoResult(data)
-      setStatus('success')
+      setRequestPhase('success')
     } catch {
-      setStatus('error')
+      setRequestPhase(didTimeout ? 'timeout' : 'server-error')
+    } finally {
+      clearTimeout(slowTimer)
+      clearTimeout(timeoutTimer)
     }
   }
 
@@ -75,12 +138,18 @@ export default function Home() {
   }
 
   function handleAlgorithmSubmit(raw: string) {
-    if (isLoading) return
+    if (isBusy) return
     const trimmed = raw.trim()
-    if (!trimmed) return // 빈 입력 처리(문구/포커스 강조)는 Sprint 3에서 보강
+    if (!trimmed) {
+      setInputError({
+        title: '검색어를 입력해주세요',
+        description: '알고리즘 이름을 입력한 뒤 다시 검색해주세요.',
+      })
+      return
+    }
     const entry = findExactMatch(trimmed)
     if (!entry) {
-      setStatus('invalid')
+      setInputError(NOT_FOUND_ERROR)
       return
     }
     selectAlgorithm(entry)
@@ -94,62 +163,152 @@ export default function Home() {
     setTab('algorithm')
     if (!entry) {
       setQuery(rawName ?? id)
-      setStatus('invalid')
+      setInputError(NOT_FOUND_ERROR)
       return
     }
     selectAlgorithm(entry)
   }
 
+  async function retryLanguageCode(lang: LanguageKey) {
+    if (!algoResult || retryingLang) return
+    const algorithmId = algoResult.id
+    setRetryingLang(lang)
+    try {
+      const res = await fetch('/api/algorithm/code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ algorithmId, lang }),
+      })
+      if (!res.ok) return
+      const data = (await res.json()) as { code: string }
+      setAlgoResult((prev) =>
+        prev && prev.id === algorithmId
+          ? { ...prev, code: { ...prev.code, [lang]: data.code } }
+          : prev,
+      )
+    } finally {
+      setRetryingLang(null)
+    }
+  }
+
   async function runProblemFetch(description: string) {
     lastAction.current = () => runProblemFetch(description)
-    setStatus('loading')
+    setInputError(null)
+    setIsSlow(false)
+    setRequestPhase('loading')
+
+    const controller = new AbortController()
+    let didTimeout = false
+    const slowTimer = setTimeout(() => setIsSlow(true), SLOW_AFTER_MS)
+    const timeoutTimer = setTimeout(() => {
+      didTimeout = true
+      controller.abort()
+    }, REQUEST_TIMEOUT_MS)
+
     try {
       const res = await fetch('/api/problem', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ description }),
+        signal: controller.signal,
       })
       if (!res.ok) {
         if (res.status === 400) {
-          setStatus('invalid')
+          const body = (await res.json().catch(() => null)) as
+            | { message?: string }
+            | null
+          setInputError({
+            title: '문제 내용을 확인해주세요',
+            description: body?.message ?? '문제 내용을 조금 더 구체적으로 입력해주세요.',
+          })
+          setRequestPhase('idle')
           return
         }
-        setStatus('error')
+        setRequestPhase('server-error')
         return
       }
       const data = (await res.json()) as ProblemResultData
       setProblemResult(data)
-      setStatus('success')
+      setRequestPhase('success')
     } catch {
-      setStatus('error')
+      setRequestPhase(didTimeout ? 'timeout' : 'server-error')
+    } finally {
+      clearTimeout(slowTimer)
+      clearTimeout(timeoutTimer)
     }
   }
 
   function searchProblem() {
-    if (isLoading) return
+    if (isBusy) return
     const trimmed = problemText.trim()
-    if (!trimmed) return // 빈 입력 처리(문구/포커스 강조)는 Sprint 3에서 보강
+    if (!trimmed) {
+      setInputError({
+        title: '검색어를 입력해주세요',
+        description: '풀고 싶은 문제 상황을 입력한 뒤 다시 검색해주세요.',
+      })
+      return
+    }
+    if (trimmed.length > MAX_PROBLEM_LENGTH) {
+      setInputError({
+        title: '문제 설명이 너무 길어요',
+        description: `문제 설명은 ${MAX_PROBLEM_LENGTH}자 이내로 입력해주세요.`,
+      })
+      return
+    }
     if (!hasMeaningfulContent(trimmed)) {
-      setStatus('invalid') // "문제 내용을 조금 더 구체적으로 입력해주세요" (PRD 5.2)
+      setInputError({
+        title: '문제 내용을 조금 더 구체적으로 입력해주세요',
+        description: '공백이나 의미 없는 문자만으로는 어떤 알고리즘이 필요한지 판단할 수 없어요.',
+      })
       return
     }
     runProblemFetch(trimmed)
   }
 
   function switchTab(next: Tab) {
-    if (next === tab) return
+    // 로딩 중에는 탭 전환도 막는다 — requestPhase가 두 탭이 공유하는 단일 상태라,
+    // 도중에 다른 탭으로 옮기면 요청이 끝났을 때 엉뚱한 탭에 결과가 표시될 수 있다 (PRD 5.11).
+    if (next === tab || isBusy) return
     setTab(next)
-    if (status === 'loading') return
+    setInputError(null)
     const hasResult = next === 'algorithm' ? algoResult : problemResult
-    setStatus(hasResult ? 'success' : 'idle')
+    setRequestPhase(hasResult ? 'success' : 'idle')
   }
 
-  const statusMeta: Record<Status, { label: string; dot: string }> = {
-    idle: { label: '대기 중', dot: 'bg-muted-foreground/50' },
-    loading: { label: '불러오는 중', dot: 'bg-medium-foreground animate-pulse' },
-    success: { label: '결과 표시됨', dot: 'bg-easy-foreground' },
-    error: { label: '오류 발생', dot: 'bg-destructive' },
-    invalid: { label: '검색어 확인 필요', dot: 'bg-medium-foreground' },
+  // PRD 5.18 우선순위: 1) 클라이언트 입력 검증 > 2) 오프라인 > 3) 로딩/지연 > 4) 서버 오류.
+  // 여러 조건이 동시에 참이어도 이 함수 하나가 항상 하나의 표시 상태만 골라낸다.
+  function getDisplay() {
+    if (inputError) return { kind: 'input-error' as const }
+    if (isOffline) return { kind: 'offline' as const }
+    if (requestPhase === 'loading') return { kind: 'loading' as const }
+    if (requestPhase === 'timeout') return { kind: 'timeout' as const }
+    if (requestPhase === 'server-error') return { kind: 'server-error' as const }
+    if (requestPhase === 'success') return { kind: 'success' as const }
+    return { kind: 'idle' as const }
+  }
+
+  const display = getDisplay()
+
+  const statusLabel: Record<typeof display.kind, string> = {
+    idle: '대기 중',
+    'input-error': inputError?.title ?? '입력을 확인해주세요',
+    offline: '인터넷 연결 끊김',
+    loading: isSlow
+      ? '예상보다 시간이 걸리고 있어요. 계속 기다리는 중입니다'
+      : '답변을 생성하는 중입니다...',
+    timeout: '응답 시간 초과',
+    'server-error': '오류 발생',
+    success: '결과 표시됨',
+  }
+
+  const statusDot: Record<typeof display.kind, string> = {
+    idle: 'bg-muted-foreground/50',
+    'input-error': 'bg-medium-foreground',
+    offline: 'bg-muted-foreground',
+    loading: 'bg-medium-foreground animate-pulse',
+    timeout: 'bg-destructive',
+    'server-error': 'bg-destructive',
+    success: 'bg-easy-foreground',
   }
 
   return (
@@ -183,8 +342,9 @@ export default function Home() {
               role="tab"
               aria-selected={tab === 'algorithm'}
               onClick={() => switchTab('algorithm')}
+              disabled={isBusy}
               className={cn(
-                'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors',
+                'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60',
                 tab === 'algorithm'
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
@@ -197,8 +357,9 @@ export default function Home() {
               role="tab"
               aria-selected={tab === 'problem'}
               onClick={() => switchTab('problem')}
+              disabled={isBusy}
               className={cn(
-                'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors',
+                'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60',
                 tab === 'problem'
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
@@ -213,25 +374,53 @@ export default function Home() {
           {tab === 'algorithm' ? (
             <AlgorithmCombobox
               value={query}
-              onValueChange={setQuery}
+              onValueChange={(v) => {
+                setQuery(v)
+                clearInputError()
+              }}
               onSelect={selectAlgorithm}
               onSubmit={handleAlgorithmSubmit}
-              disabled={isLoading}
+              disabled={isBusy}
+              highlightError={display.kind === 'input-error'}
             />
           ) : (
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1.5">
               <textarea
+                ref={problemTextareaRef}
                 value={problemText}
-                onChange={(e) => setProblemText(e.target.value)}
+                onChange={(e) => {
+                  setProblemText(e.target.value)
+                  clearInputError()
+                }}
                 rows={5}
-                disabled={isLoading}
+                disabled={isBusy}
                 placeholder="풀고 싶은 문제 상황을 자유롭게 적어보세요. 예) 정렬된 수열에서 합이 특정 값이 되는 두 수를 찾고 싶어요."
-                className="w-full resize-y rounded-xl border border-border bg-card p-4 text-sm leading-relaxed text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
+                className={cn(
+                  'w-full resize-y rounded-xl border bg-card p-4 text-sm leading-relaxed text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60',
+                  display.kind === 'input-error'
+                    ? 'border-medium focus:border-medium focus:ring-medium/30'
+                    : 'border-border focus:border-ring focus:ring-ring/30',
+                )}
               />
+              <div className="flex items-center justify-between px-1">
+                <span
+                  className={cn(
+                    'text-xs text-muted-foreground',
+                    problemText.length > MAX_PROBLEM_LENGTH &&
+                      'font-semibold text-medium-foreground',
+                  )}
+                >
+                  {problemText.length}/{MAX_PROBLEM_LENGTH}자
+                </span>
+              </div>
               <button
                 type="button"
                 onClick={searchProblem}
-                disabled={isLoading || !problemText.trim()}
+                disabled={
+                  isBusy ||
+                  !problemText.trim() ||
+                  problemText.length > MAX_PROBLEM_LENGTH
+                }
                 className="inline-flex h-11 items-center justify-center gap-2 self-end rounded-xl bg-primary px-6 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <SendHorizonal className="size-4" />
@@ -246,38 +435,43 @@ export default function Home() {
           {/* 상태 표시줄 */}
           <div className="flex items-center gap-2 border-b border-border pb-3">
             <span
-              className={cn('size-2 rounded-full', statusMeta[status].dot)}
+              className={cn('size-2 rounded-full', statusDot[display.kind])}
               aria-hidden
             />
             <span className="text-sm font-medium text-foreground">
-              {statusMeta[status].label}
+              {statusLabel[display.kind]}
             </span>
           </div>
 
           {/* 상태별 콘텐츠 */}
-          {status === 'idle' && <IdleState />}
-          {status === 'loading' && <LoadingState />}
-          {status === 'invalid' && tab === 'algorithm' && (
+          {display.kind === 'idle' && <IdleState />}
+          {display.kind === 'loading' && <LoadingState />}
+          {display.kind === 'offline' && <OfflineState />}
+          {display.kind === 'input-error' && inputError && (
             <InvalidInputState
-              title="일치하는 알고리즘을 찾을 수 없어요"
-              description="위 검색창의 자동완성 목록에서 원하는 알고리즘을 선택해주세요."
+              title={inputError.title}
+              description={inputError.description}
             />
           )}
-          {status === 'invalid' && tab === 'problem' && (
-            <InvalidInputState
-              title="문제 내용을 조금 더 구체적으로 입력해주세요"
-              description="공백이나 의미 없는 문자만으로는 어떤 알고리즘이 필요한지 판단할 수 없어요."
-            />
-          )}
-          {status === 'error' && (
+          {display.kind === 'timeout' && (
             <ErrorState
+              title="응답 시간이 초과되었습니다"
+              message="다시 시도해주세요."
               onRetry={() => {
                 if (lastAction.current) lastAction.current()
-                else setStatus('idle')
+                else setRequestPhase('idle')
               }}
             />
           )}
-          {status === 'success' &&
+          {display.kind === 'server-error' && (
+            <ErrorState
+              onRetry={() => {
+                if (lastAction.current) lastAction.current()
+                else setRequestPhase('idle')
+              }}
+            />
+          )}
+          {display.kind === 'success' &&
             (tab === 'algorithm' ? (
               algoResult ? (
                 <AlgorithmResult
@@ -285,6 +479,8 @@ export default function Home() {
                   activeLang={preferredLang}
                   onChangeLang={setPreferredLang}
                   onSelectRelated={goToAlgorithm}
+                  retryingLang={retryingLang}
+                  onRetryLang={retryLanguageCode}
                 />
               ) : (
                 <IdleState />

@@ -17,9 +17,24 @@ export function DifficultyBadge({
   level,
   className,
 }: {
-  level: Difficulty
+  level: Difficulty | null
   className?: string
 }) {
+  // PRD 5.7: 난이도 필드가 파싱에 실패하면 null로 내려온다 — 카드 전체를 죽이지 않고
+  // 이 배지만 "준비되지 않음" 상태로 보여준다.
+  if (level === null) {
+    return (
+      <span
+        className={cn(
+          'inline-flex items-center rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold tracking-tight text-muted-foreground',
+          className,
+        )}
+      >
+        난이도 정보 없음
+      </span>
+    )
+  }
+
   return (
     <span
       className={cn(

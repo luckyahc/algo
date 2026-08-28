@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowRight, Info, Lightbulb, Puzzle, SearchX } from 'lucide-react'
 import { getCatalogEntry } from '@/lib/algorithm-catalog'
-import type { ProblemResultData } from '@/lib/schemas'
+import { MISSING_FIELD_PLACEHOLDER, type ProblemResultData } from '@/lib/schemas'
 import { CopyButton } from '@/components/copy-button'
 import { ComplexityBadge, DifficultyBadge } from '@/components/difficulty-badge'
 import { cn } from '@/lib/utils'
@@ -69,7 +69,9 @@ export function ProblemResult({
           <DifficultyBadge level={result.difficulty} />
           <div className="flex items-start gap-2 text-sm leading-relaxed text-muted-foreground">
             <Info className="mt-0.5 size-4 shrink-0 text-primary" />
-            <p className="text-pretty">{result.difficultyReason}</p>
+            <p className="text-pretty">
+              {result.difficultyReason ?? MISSING_FIELD_PLACEHOLDER}
+            </p>
           </div>
         </div>
       </Card>

@@ -1,10 +1,9 @@
-import { generateObject } from 'ai'
 import {
   ALGORITHM_CATALOG,
   findClosestEntries,
   findExactMatch,
 } from '@/lib/algorithm-catalog'
-import { CATALOG_ID_LIST, MODEL } from '@/lib/ai'
+import { CATALOG_ID_LIST, generatePartialSafe } from '@/lib/ai'
 import { AlgorithmDetailSchema } from '@/lib/schemas'
 
 export const runtime = 'nodejs'
@@ -46,11 +45,9 @@ export async function POST(request: Request) {
     )
   }
 
-  try {
-    const { object } = await generateObject({
-      model: MODEL,
-      schema: AlgorithmDetailSchema,
-      prompt: `당신은 알고리즘 교육 콘텐츠 작성자입니다. 아래 알고리즘에 대해 한국어로 응답하세요.
+  const result = await generatePartialSafe(
+    AlgorithmDetailSchema,
+    `당신은 알고리즘 교육 콘텐츠 작성자입니다. 아래 알고리즘에 대해 한국어로 응답하세요.
 
 알고리즘: ${entry.name} (카테고리: ${entry.category})
 
@@ -64,25 +61,30 @@ export async function POST(request: Request) {
 
 카탈로그 id 목록:
 ${CATALOG_ID_LIST}`,
-    })
+  )
 
-    const related = object.related.filter(
-      (id) => id !== entry.id && ALGORITHM_CATALOG.some((a) => a.id === id),
-    )
-
-    return Response.json({
-      id: entry.id,
-      name: entry.name,
-      category: entry.category,
-      ...object,
-      related,
-    })
-  } catch (err) {
-    console.error('[api/algorithm] generation failed', err)
+  if (result.status === 'failed') {
     return jsonError(
       502,
       'UPSTREAM_ERROR',
       '일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
     )
   }
+
+  const data = result.data
+  const related = (data.related ?? []).filter(
+    (id) => id !== entry.id && ALGORITHM_CATALOG.some((a) => a.id === id),
+  )
+
+  return Response.json({
+    id: entry.id,
+    name: entry.name,
+    category: entry.category,
+    description: data.description ?? null,
+    difficulty: data.difficulty ?? null,
+    difficultyReason: data.difficultyReason ?? null,
+    useCases: data.useCases ?? null,
+    code: data.code ?? { c: null, cpp: null, java: null, python: null },
+    related,
+  })
 }

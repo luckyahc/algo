@@ -1,6 +1,6 @@
-import { generateObject } from 'ai'
 import { ALGORITHM_CATALOG } from '@/lib/algorithm-catalog'
-import { CATALOG_ID_LIST, MODEL } from '@/lib/ai'
+import { CATALOG_ID_LIST, generatePartialSafe } from '@/lib/ai'
+import { MAX_PROBLEM_LENGTH } from '@/lib/request-timing'
 import { ProblemAnalysisSchema } from '@/lib/schemas'
 import { hasMeaningfulContent } from '@/lib/validation'
 
@@ -33,6 +33,14 @@ export async function POST(request: Request) {
     return jsonError(400, 'INVALID_INPUT', '검색어를 입력해주세요.')
   }
 
+  if (trimmed.length > MAX_PROBLEM_LENGTH) {
+    return jsonError(
+      400,
+      'TOO_LONG',
+      `문제 설명은 ${MAX_PROBLEM_LENGTH}자 이내로 입력해주세요.`,
+    )
+  }
+
   if (!hasMeaningfulContent(trimmed)) {
     return jsonError(
       400,
@@ -41,11 +49,9 @@ export async function POST(request: Request) {
     )
   }
 
-  try {
-    const { object } = await generateObject({
-      model: MODEL,
-      schema: ProblemAnalysisSchema,
-      prompt: `당신은 알고리즘 코딩테스트 문제 분석가입니다. 아래 문제를 분석해 한국어로 응답하세요.
+  const result = await generatePartialSafe(
+    ProblemAnalysisSchema,
+    `당신은 알고리즘 코딩테스트 문제 분석가입니다. 아래 문제를 분석해 한국어로 응답하세요.
 
 문제: ${trimmed}
 
@@ -63,32 +69,34 @@ export async function POST(request: Request) {
 
 카탈로그 id 목록:
 ${CATALOG_ID_LIST}`,
-    })
+  )
 
-    // 카탈로그에 없는 algorithmId를 참조하는 풀이는 버린다 (PRD 5.9와 동일한 원칙).
-    let solutions = object.solutions.filter((s) =>
-      ALGORITHM_CATALOG.some((a) => a.id === s.algorithmId),
-    )
-    // 필터링으로 추천 풀이가 사라졌다면 첫 번째 풀이를 기본 탭으로 승격한다.
-    if (solutions.length > 0 && !solutions.some((s) => s.recommended)) {
-      solutions = solutions.map((s, i) => ({ ...s, recommended: i === 0 }))
-    }
-    // 풀이가 모두 걸러졌다면 "매칭 알고리즘 없음"(5.8)과 동일하게 취급한다.
-    const matched = object.matched && solutions.length > 0
-
-    return Response.json({
-      problem: trimmed,
-      difficulty: object.difficulty,
-      difficultyReason: object.difficultyReason,
-      matched,
-      solutions,
-    })
-  } catch (err) {
-    console.error('[api/problem] generation failed', err)
+  if (result.status === 'failed') {
     return jsonError(
       502,
       'UPSTREAM_ERROR',
       '일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
     )
   }
+
+  const data = result.data
+
+  // 카탈로그에 없는 algorithmId를 참조하는 풀이는 버린다 (PRD 5.9와 동일한 원칙).
+  let solutions = (data.solutions ?? []).filter((s) =>
+    ALGORITHM_CATALOG.some((a) => a.id === s.algorithmId),
+  )
+  // 필터링으로 추천 풀이가 사라졌다면 첫 번째 풀이를 기본 탭으로 승격한다.
+  if (solutions.length > 0 && !solutions.some((s) => s.recommended)) {
+    solutions = solutions.map((s, i) => ({ ...s, recommended: i === 0 }))
+  }
+  // 풀이가 모두 걸러졌다면 "매칭 알고리즘 없음"(5.8)과 동일하게 취급한다.
+  const matched = Boolean(data.matched) && solutions.length > 0
+
+  return Response.json({
+    problem: trimmed,
+    difficulty: data.difficulty ?? null,
+    difficultyReason: data.difficultyReason ?? null,
+    matched,
+    solutions,
+  })
 }
