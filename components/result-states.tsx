@@ -53,18 +53,22 @@ export function LoadingState() {
   )
 }
 
-export function InvalidAlgorithmState() {
+export function InvalidInputState({
+  title,
+  description,
+}: {
+  title: string
+  description: string
+}) {
   return (
     <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-medium/40 bg-medium/5 px-6 py-16 text-center">
       <div className="flex size-16 items-center justify-center rounded-2xl bg-medium/10">
         <SearchX className="size-8 text-medium-foreground" />
       </div>
       <div className="flex flex-col gap-1.5">
-        <p className="text-base font-semibold text-foreground">
-          일치하는 알고리즘을 찾을 수 없어요
-        </p>
+        <p className="text-base font-semibold text-foreground">{title}</p>
         <p className="max-w-sm text-pretty text-sm leading-relaxed text-muted-foreground">
-          위 검색창의 자동완성 목록에서 원하는 알고리즘을 선택해주세요.
+          {description}
         </p>
       </div>
     </div>

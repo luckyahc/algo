@@ -1,4 +1,4 @@
-import type { Difficulty } from '@/lib/algorithms'
+import type { Difficulty } from '@/lib/schemas'
 import { cn } from '@/lib/utils'
 
 const STYLES: Record<Difficulty, string> = {

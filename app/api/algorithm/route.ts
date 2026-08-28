@@ -4,15 +4,10 @@ import {
   findClosestEntries,
   findExactMatch,
 } from '@/lib/algorithm-catalog'
+import { CATALOG_ID_LIST, MODEL } from '@/lib/ai'
 import { AlgorithmDetailSchema } from '@/lib/schemas'
 
 export const runtime = 'nodejs'
-
-const MODEL = 'anthropic/claude-sonnet-5'
-
-const CATALOG_ID_LIST = ALGORITHM_CATALOG.map((a) => `${a.id}: ${a.name}`).join(
-  '\n',
-)
 
 function jsonError(
   status: number,

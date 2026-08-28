@@ -59,3 +59,9 @@ export const ProblemAnalysisSchema = z.object({
 })
 
 export type ProblemAnalysis = z.infer<typeof ProblemAnalysisSchema>
+
+// 사용자가 입력한 문제 원문 + AI가 생성한 분석 결과를 합친, 화면에 렌더링되는 최종 형태.
+// (원문은 AI가 다시 생성하지 않고 그대로 재사용한다 — lib/ai.ts, app/api/problem/route.ts 참고)
+export type ProblemResultData = ProblemAnalysis & {
+  problem: string
+}

@@ -19,10 +19,12 @@ PRD가 요구사항의 원본(source of truth)이며, 이 문서들은 그것을
 - 아키텍처가 바뀌면(예: AI 프로바이더 변경) `02-architecture.md`를 먼저 갱신하고 계획에 반영한다.
 - 스프린트가 끝나면 `01-current-state.md`를 최신 상태로 갱신해 다음 스프린트의 기준선을 정확히 유지한다.
 
-## 현재 상태 요약 (2026-08-28 기준, Sprint 1 완료)
+## 현재 상태 요약 (2026-08-28 기준, Sprint 2 완료)
 
-**알고리즘 검색(기능 A)**은 `lib/algorithm-catalog.ts`(82개 항목 유효 목록)와 `app/api/algorithm`(Vercel AI Gateway + `generateObject`)로 실제 AI 연동까지 배선이 끝났다. C/C++/Java/Python 언어 탭, 세션 내 언어 선택 유지, 관련 알고리즘 자기참조/무효 id 필터링(5.9, 5.10), 목록에 없는 이름 입력 처리(5.3)까지 구현·검증됨. 단, 로컬에 `AI_GATEWAY_API_KEY`가 없어 AI 성공 응답 렌더링 자체는 아직 육안 검증 전이다.
+**알고리즘 검색(기능 A)**은 `lib/algorithm-catalog.ts`(82개 항목 유효 목록)와 `app/api/algorithm`(Vercel AI Gateway + `generateObject`)로 실제 AI 연동까지 배선이 끝났다. C/C++/Java/Python 언어 탭, 세션 내 언어 선택 유지, 관련 알고리즘 자기참조/무효 id 필터링(5.9, 5.10), 목록에 없는 이름 입력 처리(5.3)까지 구현·검증됨.
 
-**문제 검색(기능 B)**은 아직 Sprint 0 이전과 동일하게 고정 mock 결과 하나만 반환한다 — 다음 착수 지점은 Sprint 2.
+**문제 검색(기능 B)**도 `app/api/problem`으로 실제 AI 연동이 끝났다. 풀이가 여러 개면 탭 + 시간복잡도(3.2), 매칭되는 알고리즘이 없으면 오류가 아닌 정상 결과로 안내(5.8), 공백/무의미 입력 차단(5.2)까지 구현·검증됨.
 
-예외 처리(PRD 5장) 19개 항목 중 5.3/5.9/5.10만 구현·검증됐고, 나머지(지연·타임아웃·오프라인·글자 수 제한·클립보드 실패·모바일 등)는 Sprint 3~4에서 처리한다. 자세한 내용과 남은 간극은 [01-current-state.md](./01-current-state.md), 스프린트별 체크박스는 [03-sprint-plan.md](./03-sprint-plan.md), 예외 항목별 상태는 [04-exception-checklist.md](./04-exception-checklist.md) 참고.
+두 기능 모두 **로컬에 `AI_GATEWAY_API_KEY`가 없어 AI 성공 응답 렌더링 자체는 아직 육안 검증 전**이다(입력 검증·에러 코드·필터링 로직은 서버 단에서 확인됨).
+
+예외 처리(PRD 5장) 19개 항목 중 5.2/5.3/5.8/5.9/5.10 다섯 개가 구현·검증됐고, 나머지(빈 입력 안내·지연·타임아웃·오프라인·글자 수 제한·클립보드 실패·모바일 등)는 Sprint 3~4에서 처리한다. 자세한 내용과 남은 간극은 [01-current-state.md](./01-current-state.md), 스프린트별 체크박스는 [03-sprint-plan.md](./03-sprint-plan.md), 예외 항목별 상태는 [04-exception-checklist.md](./04-exception-checklist.md) 참고.

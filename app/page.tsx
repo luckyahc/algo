@@ -7,18 +7,19 @@ import {
   findExactMatch,
   getCatalogEntry,
 } from '@/lib/algorithm-catalog'
-import {
-  MOCK_PROBLEM_RESULT,
-  type ProblemResult as ProblemResultType,
-} from '@/lib/algorithms'
-import type { AlgorithmResultData, LanguageKey } from '@/lib/schemas'
+import type {
+  AlgorithmResultData,
+  LanguageKey,
+  ProblemResultData,
+} from '@/lib/schemas'
+import { hasMeaningfulContent } from '@/lib/validation'
 import { AlgorithmCombobox } from '@/components/algorithm-combobox'
 import { AlgorithmResult } from '@/components/algorithm-result'
 import { ProblemResult } from '@/components/problem-result'
 import {
   ErrorState,
   IdleState,
-  InvalidAlgorithmState,
+  InvalidInputState,
   LoadingState,
 } from '@/components/result-states'
 import { ThemeToggle } from '@/components/theme-toggle'
@@ -32,7 +33,7 @@ export default function Home() {
   const [status, setStatus] = useState<Status>('idle')
   const [query, setQuery] = useState('')
   const [algoResult, setAlgoResult] = useState<AlgorithmResultData | null>(null)
-  const [problemResult, setProblemResult] = useState<ProblemResultType | null>(
+  const [problemResult, setProblemResult] = useState<ProblemResultData | null>(
     null,
   )
   const [problemText, setProblemText] = useState('')
@@ -99,14 +100,40 @@ export default function Home() {
     selectAlgorithm(entry)
   }
 
-  function searchProblem() {
-    if (isLoading || !problemText.trim()) return
-    lastAction.current = () => searchProblem()
+  async function runProblemFetch(description: string) {
+    lastAction.current = () => runProblemFetch(description)
     setStatus('loading')
-    setTimeout(() => {
-      setProblemResult(MOCK_PROBLEM_RESULT)
+    try {
+      const res = await fetch('/api/problem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description }),
+      })
+      if (!res.ok) {
+        if (res.status === 400) {
+          setStatus('invalid')
+          return
+        }
+        setStatus('error')
+        return
+      }
+      const data = (await res.json()) as ProblemResultData
+      setProblemResult(data)
       setStatus('success')
-    }, 650)
+    } catch {
+      setStatus('error')
+    }
+  }
+
+  function searchProblem() {
+    if (isLoading) return
+    const trimmed = problemText.trim()
+    if (!trimmed) return // 빈 입력 처리(문구/포커스 강조)는 Sprint 3에서 보강
+    if (!hasMeaningfulContent(trimmed)) {
+      setStatus('invalid') // "문제 내용을 조금 더 구체적으로 입력해주세요" (PRD 5.2)
+      return
+    }
+    runProblemFetch(trimmed)
   }
 
   function switchTab(next: Tab) {
@@ -230,7 +257,18 @@ export default function Home() {
           {/* 상태별 콘텐츠 */}
           {status === 'idle' && <IdleState />}
           {status === 'loading' && <LoadingState />}
-          {status === 'invalid' && tab === 'algorithm' && <InvalidAlgorithmState />}
+          {status === 'invalid' && tab === 'algorithm' && (
+            <InvalidInputState
+              title="일치하는 알고리즘을 찾을 수 없어요"
+              description="위 검색창의 자동완성 목록에서 원하는 알고리즘을 선택해주세요."
+            />
+          )}
+          {status === 'invalid' && tab === 'problem' && (
+            <InvalidInputState
+              title="문제 내용을 조금 더 구체적으로 입력해주세요"
+              description="공백이나 의미 없는 문자만으로는 어떤 알고리즘이 필요한지 판단할 수 없어요."
+            />
+          )}
           {status === 'error' && (
             <ErrorState
               onRetry={() => {
@@ -262,8 +300,7 @@ export default function Home() {
         </div>
 
         <footer className="pt-4 text-center text-xs text-muted-foreground">
-          알고리즘 설명은 AI가 생성하며 실제와 다를 수 있습니다. 문제 검색은 아직
-          예시(mock) 데이터입니다.
+          모든 설명은 AI가 생성하며 실제와 다를 수 있습니다.
         </footer>
       </div>
     </div>
