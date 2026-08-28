@@ -1,9 +1,16 @@
+import { google } from '@ai-sdk/google'
 import { generateObject, NoObjectGeneratedError } from 'ai'
 import type { z } from 'zod'
 import { ALGORITHM_CATALOG } from '@/lib/algorithm-catalog'
 
-// Vercel AI Gateway를 통해 호출한다 ("provider/model" 문자열 = 기본 provider).
-export const MODEL = 'anthropic/claude-sonnet-5'
+// Google Generative AI(Gemini)를 직접 호출한다 — Vercel AI Gateway를 거치지 않는다.
+// @ai-sdk/google은 GOOGLE_GENERATIVE_AI_API_KEY 환경변수를 자동으로 읽는다.
+// 모델 id는 2026-08-28 기준 실제 계정에서 조회 가능한 목록(GET
+// generativelanguage.googleapis.com/v1beta/models)으로 직접 확인해 선택했다.
+// gemini-3.7-flash가 가장 최신이지만 이 시점 기준 503(수요 과다)이 계속 발생했고,
+// 대신 gemini-2.5-flash가 신규 사용자 대상으로 제공 종료되며 API가 안내한 후속
+// 모델이 gemini-3.6-flash였다 — 실제로도 안정적으로 응답해 이 모델을 쓴다.
+export const MODEL = google('gemini-3.6-flash')
 
 // AI가 related/algorithmId 필드에서 참조할 수 있는 유효 id 목록을 프롬프트에 함께 넣는다.
 export const CATALOG_ID_LIST = ALGORITHM_CATALOG.map(

@@ -6,7 +6,10 @@
 
 ## 1. AI 연동 방식 (구현됨)
 
-- **Vercel AI SDK(`ai` 패키지, 설치된 버전은 `ai@7`) + AI Gateway**를 사용한다. 프로바이더 SDK(`@ai-sdk/anthropic` 등)를 직접 설치하지 않고, `"provider/model"` 문자열로 Gateway를 통해 호출한다. 실제 사용 모델은 `anthropic/claude-sonnet-5`(`lib/ai.ts`의 `MODEL` 상수, `/api/algorithm`·`/api/problem` 둘 다 여기서 가져다 쓴다).
+> **2026-08-28 변경**: 처음엔 Vercel AI Gateway(`AI_GATEWAY_API_KEY` + `anthropic/claude-sonnet-5`)로 설계했으나, 그 키가 실제로는 Gateway 인증에 계속 실패했다. 대신 사용자가 보유한 **Google Gemini API 키**로 전환했다 — `@ai-sdk/google`을 설치해 Gateway를 거치지 않고 Google Generative AI를 직접 호출한다. 이 절의 나머지 설명(구조화 출력, 스트리밍 미사용, 런타임)은 프로바이더가 바뀌어도 그대로 유효하다.
+
+- **Vercel AI SDK(`ai` 패키지, `ai@7`) + `@ai-sdk/google`**을 사용한다. `lib/ai.ts`의 `MODEL = google('gemini-3.6-flash')`를 `/api/algorithm`·`/api/problem`·`/api/algorithm/code` 세 라우트가 공유한다. 인증은 `GOOGLE_GENERATIVE_AI_API_KEY` 환경변수(`@ai-sdk/google`이 자동으로 읽음)로 한다 — Vercel AI Gateway는 더 이상 쓰지 않는다.
+- **모델 선정 근거**: `GET generativelanguage.googleapis.com/v1beta/models`를 그 키로 직접 호출해 실제 계정에서 쓸 수 있는 모델 목록을 확인했다. 가장 최신인 `gemini-3.7-flash`는 이 시점 기준 계속 503(수요 과다)을 반환했고, 기존에 쓰려던 `gemini-2.5-flash`는 신규 사용자 대상으로 제공이 끊겨 있었다(API 응답이 직접 `gemini-3.6-flash`로 갈아타라고 안내). 실제로 `gemini-3.6-flash`가 안정적으로 응답해 이걸 선택했다. **모델이 다시 불안정해지면 `lib/ai.ts`의 `MODEL` 한 줄만 바꾸면 된다.**
 - **구조화 출력**은 `generateObject` + Zod 스키마를 사용한다. PRD 5.7("형식에 맞지 않는 응답 파싱 실패")이 요구하는 스키마 검증을 AI SDK가 기본 제공하므로, 이 조합이 예외 처리 요구사항과 가장 직접적으로 맞아떨어진다.
 - 별도 프론트엔드 스트리밍은 필수 아님(결과가 카드 단위로 한 번에 렌더링되는 구조이므로). 다만 지연 상태 UX(5.4)를 위해 요청 시작 시각 기준 클라이언트 타이머만 사용하고, 서버 응답 자체는 단일 JSON으로 받는다.
 - 실행 런타임은 Node.js(Fluid Compute) 기본값을 사용한다. Edge 런타임은 사용하지 않는다.
@@ -115,5 +118,5 @@ export const ProblemAnalysisSchema = z.object({
 
 ## 6. 배포
 
-- Vercel 프로젝트로 배포. AI Gateway 관련 환경변수는 `vercel env`로 관리하고 `.env*`는 `.gitignore`에 포함되어 있으므로 커밋하지 않는다. 로컬 개발자를 위해 어떤 키가 필요한지만 알려주는 `.env.local.example`(값은 비움)은 `.gitignore`에 예외로 추가해 커밋한다.
+- Vercel 프로젝트로 배포. `GOOGLE_GENERATIVE_AI_API_KEY`는 `vercel env`로 관리하고 `.env*`는 `.gitignore`에 포함되어 있으므로 커밋하지 않는다. 로컬 개발자를 위해 어떤 키가 필요한지만 알려주는 `.env.local.example`(값은 비움)은 `.gitignore`에 예외로 추가해 커밋한다.
 - 아직 Vercel 프로젝트로 실제 배포는 하지 않았다 — Sprint 5 대상.
