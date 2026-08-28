@@ -33,15 +33,18 @@ Route Handler는 Next.js App Router 방식(`app/api/*/route.ts`)을 쓴다:
 
 ### 3.1 알고리즘 카탈로그 (정적, 검증용) — 구현됨
 
-`lib/algorithm-catalog.ts` — 이름/별칭/카테고리만 담은 **경량 목록**(현재 82개 항목)으로, AI가 생성하는 상세 내용과 분리한다. 이 목록이 PRD 3.1/5.3이 말하는 "사전 정의된 유효 알고리즘 집합"이 된다.
+`lib/algorithm-catalog.ts` — 이름/별칭/카테고리만 담은 **경량 목록**(현재 273개 항목)으로, AI가 생성하는 상세 내용과 분리한다. 이 목록이 PRD 3.1/5.3이 말하는 "사전 정의된 유효 알고리즘 집합"이 된다.
+
+> **2026-08-28 확장(2차례)**: 기초 82개에 ① QOJ(Universal Online Judge, ICPC World Finals/IOI/CCPC/Petrozavodsk 캠프 수준) 문제 에디토리얼에서 실제 도구로 쓰이는 고급 알고리즘/기법 143개, ② 사용자가 제시한 USACO Guide류 종합 커리큘럼 목록에서 병합한 48개를 순서대로 추가했다(카테고리도 기하/다항식/게임이론/기초 4개 신설). 항목이 늘면서 `CATALOG_ID_LIST`(`lib/ai.ts`, 프롬프트에 넣는 id 목록)도 함께 커졌다는 점에 주의 — 알고리즘 상세/문제 분석 요청 프롬프트 토큰 수가 그만큼 늘어나고, 실측 응답 시간도 최대 2분 가까이 걸리는 사례가 관찰됐다(`03-sprint-plan.md` Sprint 7 참고).
 
 ```ts
 export type CatalogEntry = {
   id: string
   name: string
   aliases: string[]
-  category: '정렬' | '탐색' | '그래프' | '트리' | '동적계획법' | '그리디'
+  category: '기초' | '정렬' | '탐색' | '그래프' | '트리' | '동적계획법' | '그리디'
     | '분할정복' | '백트래킹' | '문자열' | '수학' | '자료구조' | '배열'
+    | '기하' | '다항식' | '게임이론'
 }
 ```
 

@@ -9,7 +9,7 @@ PRD가 요구사항의 원본(source of truth)이며, 이 문서들은 그것을
 |---|---|
 | [01-current-state.md](./01-current-state.md) | 현재 코드베이스가 PRD 대비 어디까지 구현되어 있는지의 스냅샷(베이스라인 감사) |
 | [02-architecture.md](./02-architecture.md) | 남은 작업을 구현하기 위한 기술 결정(AI 연동 방식, 데이터 스키마, 상태 관리 구조) |
-| [03-sprint-plan.md](./03-sprint-plan.md) | Sprint 0~6 실행 계획. 각 스프린트의 목표/작업/완료 기준(PRD 조항 매핑) |
+| [03-sprint-plan.md](./03-sprint-plan.md) | Sprint 0~8 실행 계획. 각 스프린트의 목표/작업/완료 기준(PRD 조항 매핑) |
 | [04-exception-checklist.md](./04-exception-checklist.md) | PRD 5장(예외 처리) 19개 항목 구현 여부를 추적하는 체크리스트 |
 
 ## 사용 방법
@@ -28,5 +28,7 @@ PRD가 요구사항의 원본(source of truth)이며, 이 문서들은 그것을
 **Sprint 5(통합 QA)**에서 실제 버그를 하나 발견해 고쳤다: `app/page.tsx`에 React 에러 바운더리가 없어 결과 렌더링 중 오류가 나면 헤더·입력창까지 통째로 죽을 수 있었다 — `components/result-error-boundary.tsx`를 추가해 결과 영역만 격리했다(Done Criteria #6).
 
 **남은 병목은 이제 하나뿐이다** — 사용자 본인의 Vercel 로그인(OAuth는 에이전트가 대신할 수 없음, CLI 설치까지만 완료). 이번 세션은 브라우저 자동화 도구 없이 진행돼 실제 화면 렌더링·모바일 반응형 등의 육안 확인은 남아 있다(**Sprint 6**에서 정리).
+
+**알고리즘 카탈로그를 두 차례 대폭 확장했다(Sprint 7~8).** 기초 82개 → QOJ(ICPC/IOI/CCPC/Petrozavodsk 수준) 고급 알고리즘 143개 추가(225개) → 사용자가 제시한 USACO Guide류 종합 커리큘럼 병합 48개 추가, 현재 **273개**, 16개 카테고리(기초/기하/다항식/게임이론 신설). LeetCode식 문제 유형 태그(SQL, 동시성 프로그래밍 등)와 순수 학문 분야명은 "알고리즘"이 아니라서 제외했다. id·이름·별칭 전수 중복 검사 통과, 신규 항목(세그먼트 트리 비츠, 데카르트 트리)으로 실제 AI 호출까지 확인.
 
 Done Criteria 1~8 중 #1/#2/#4가 API 레벨로 검증됐고, #7은 코드 검증, #3/#5/#6/#8은 코드 검증만 남았다. 자세한 QA 결과표와 후속 계획은 [03-sprint-plan.md](./03-sprint-plan.md)의 "QA 결과"·"Sprint 6", 남은 간극은 [01-current-state.md](./01-current-state.md), 예외 항목별 상태는 [04-exception-checklist.md](./04-exception-checklist.md) 참고.
