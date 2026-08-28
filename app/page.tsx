@@ -394,6 +394,10 @@ export default function Home() {
                 }}
                 rows={5}
                 disabled={isBusy}
+                onFocus={(e) => {
+                  // PRD 5.17: 모바일 가상 키보드가 입력창을 가리지 않도록 포커스 시 스크롤한다.
+                  e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                }}
                 placeholder="풀고 싶은 문제 상황을 자유롭게 적어보세요. 예) 정렬된 수열에서 합이 특정 값이 되는 두 수를 찾고 싶어요."
                 className={cn(
                   'w-full resize-y rounded-xl border bg-card p-4 text-sm leading-relaxed text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:ring-2 disabled:cursor-not-allowed disabled:opacity-60',

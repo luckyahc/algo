@@ -101,7 +101,7 @@ export function ProblemResult({
                   type="button"
                   onClick={() => setActiveSol(i)}
                   className={cn(
-                    'flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                    'flex-1 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
                     i === activeSol
                       ? 'bg-card text-foreground shadow-sm'
                       : 'text-muted-foreground hover:text-foreground',

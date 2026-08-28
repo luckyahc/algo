@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { Check, Copy } from 'lucide-react'
 import type { LanguageKey } from '@/lib/schemas'
+import { useCopyToClipboard } from '@/lib/use-copy'
 import { cn } from '@/lib/utils'
 
 const PYTHON_KEYWORDS = new Set([
@@ -117,19 +118,9 @@ export function CodeBlock({
   lang?: LanguageKey
   className?: string
 }) {
-  const [copied, setCopied] = useState(false)
+  const { status, copy } = useCopyToClipboard()
   const lines = source.replace(/\n$/, '').split('\n')
   const keywords = KEYWORDS_BY_LANG[lang]
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(source)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1600)
-    } catch {
-      // clipboard unavailable — silently ignore
-    }
-  }
 
   return (
     <div
@@ -149,24 +140,34 @@ export function CodeBlock({
             </span>
           ) : null}
         </div>
-        <button
-          type="button"
-          onClick={copy}
-          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 font-mono text-xs text-code-fg/70 transition-colors hover:bg-white/10 hover:text-code-fg"
-          aria-label="코드 복사"
-        >
-          {copied ? (
-            <>
-              <Check className="size-3.5 text-code-string" />
-              복사됨
-            </>
-          ) : (
-            <>
-              <Copy className="size-3.5" />
-              복사
-            </>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => copy(source)}
+            className="relative inline-flex items-center gap-1.5 rounded-md px-2 py-1 font-mono text-xs text-code-fg/70 transition-colors after:absolute after:-inset-2 after:content-[''] hover:bg-white/10 hover:text-code-fg"
+            aria-label="코드 복사"
+          >
+            {status === 'copied' ? (
+              <>
+                <Check className="size-3.5 text-code-string" />
+                복사됨
+              </>
+            ) : (
+              <>
+                <Copy className="size-3.5" />
+                복사
+              </>
+            )}
+          </button>
+          {status === 'failed' && (
+            <span
+              role="status"
+              className="absolute right-0 top-full z-10 mt-1.5 whitespace-nowrap rounded-md bg-foreground px-2.5 py-1.5 text-xs font-medium text-background shadow-lg"
+            >
+              복사에 실패했어요. 직접 선택해 복사해주세요.
+            </span>
           )}
-        </button>
+        </div>
       </div>
       <div className="overflow-x-auto">
         <pre className="min-w-full py-3 font-mono text-[13px] leading-relaxed text-code-fg">

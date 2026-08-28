@@ -21,7 +21,7 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:text-foreground"
+      className="relative inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors after:absolute after:-inset-1.5 after:content-[''] hover:text-foreground"
       aria-label={dark ? '라이트 모드로 전환' : '다크 모드로 전환'}
       title={dark ? '라이트 모드' : '다크 모드'}
     >

@@ -106,6 +106,7 @@ export const ProblemAnalysisSchema = z.object({
 - **타임아웃/재시도(5.5, 5.6)**: 요청마다 새 `AbortController`를 만들고, `REQUEST_TIMEOUT_MS`(18초)가 지나면 abort한다. `catch` 블록에서 "우리가 스스로 abort한 것인지" 여부(`didTimeout` 클로저 변수)로 `timeout`과 `server-error`를 구분한다. 재시도 버튼은 `lastAction` ref에 저장해 둔 마지막 요청 함수를 그대로 다시 호출한다 — 횟수 제한 없음.
 - **로딩 중 잠금(5.11)**: `isBusy = requestPhase === 'loading'`. 검색창·버튼뿐 아니라 **탭 전환(`switchTab`)도** 이 값이 true면 막는다 — `requestPhase`가 두 탭이 공유하는 단일 상태라, 로딩 중 탭을 바꾸면 요청이 끝났을 때 엉뚱한 탭에 결과가 표시될 수 있어서다.
 - **언어 탭 선택(3.2, "세션 내 유지")**: `page.tsx` 최상위의 `preferredLang` state(`LanguageKey`, 최초값 `cpp`)로 구현했다. 새 알고리즘 결과를 렌더링할 때마다 이 값을 기본 탭으로 쓴다.
+- **클립보드 피드백(5.15, 5.16, Sprint 4에서 추가)**: `lib/use-copy.ts`의 `useCopyToClipboard()` 훅이 `idle`/`copied`/`failed` 세 상태를 관리한다. `CopyButton`(카드 우측 상단 아이콘)과 `CodeBlock`(코드 블록 자체 헤더의 복사 버튼)이 각자 따로 구현하던 동일한 로직을 이 훅 하나로 합쳤다. 실패 시에는 버튼 근처에 짧은 토스트(`"복사에 실패했어요..."`)를 띄운다 — 이 토스트는 `absolute` 포지셔닝을 쓰므로, 조상 요소에 `overflow-hidden`이 있으면 잘려 보이지 않는다는 점에 주의해야 한다(실제로 `AlgorithmResult`의 코드 카드에서 이 문제가 있어 불필요한 `overflow-hidden`을 제거했다).
 
 ## 5. 검증/보안
 

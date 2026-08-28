@@ -98,7 +98,11 @@ export function AlgorithmCombobox({
               onValueChange(e.target.value)
               setOpen(true)
             }}
-            onFocus={() => setOpen(true)}
+            onFocus={(e) => {
+              setOpen(true)
+              // PRD 5.17: 모바일 가상 키보드가 입력창을 가리지 않도록 포커스 시 스크롤한다.
+              e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            }}
             onKeyDown={onKeyDown}
             placeholder="알고리즘 이름을 입력하세요 (예: 이진 탐색, DFS, 다익스트라)"
             className={cn(

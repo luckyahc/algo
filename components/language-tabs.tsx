@@ -30,7 +30,7 @@ export function LanguageTabs({
             type="button"
             onClick={() => onChangeLang(lang)}
             className={cn(
-              'flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              'flex-1 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
               lang === activeLang
                 ? 'bg-card text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground',
@@ -53,7 +53,7 @@ export function LanguageTabs({
             type="button"
             onClick={() => onRetryLang(activeLang)}
             disabled={isRetrying}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+            className="relative inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors after:absolute after:-inset-1.5 after:content-[''] hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
             <RotateCw className={cn('size-3.5', isRetrying && 'animate-spin')} />
             {isRetrying ? '다시 불러오는 중...' : '다시 시도'}

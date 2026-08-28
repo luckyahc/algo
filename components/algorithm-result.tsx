@@ -115,7 +115,9 @@ export function AlgorithmResult({
       </Card>
 
       {/* 4. 예시 코드 (언어 탭) */}
-      <Card className="overflow-hidden">
+      {/* overflow-hidden을 주지 않는다 — CodeBlock이 자체적으로 모서리를 둥글게 잘라내고,
+          이 카드에 overflow-hidden을 주면 복사 실패 토스트(PRD 5.15)가 잘려 보이지 않는다. */}
+      <Card>
         <div className="mb-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <Sparkles className="size-4.5 text-primary" />
