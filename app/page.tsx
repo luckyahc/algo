@@ -21,6 +21,7 @@ import { hasMeaningfulContent } from '@/lib/validation'
 import { AlgorithmCombobox } from '@/components/algorithm-combobox'
 import { AlgorithmResult } from '@/components/algorithm-result'
 import { ProblemResult } from '@/components/problem-result'
+import { ResultErrorBoundary } from '@/components/result-error-boundary'
 import {
   ErrorState,
   IdleState,
@@ -475,28 +476,31 @@ export default function Home() {
               }}
             />
           )}
-          {display.kind === 'success' &&
-            (tab === 'algorithm' ? (
-              algoResult ? (
-                <AlgorithmResult
-                  algo={algoResult}
-                  activeLang={preferredLang}
-                  onChangeLang={setPreferredLang}
-                  onSelectRelated={goToAlgorithm}
-                  retryingLang={retryingLang}
-                  onRetryLang={retryLanguageCode}
+          {display.kind === 'success' && (
+            <ResultErrorBoundary onReset={() => setRequestPhase('idle')}>
+              {tab === 'algorithm' ? (
+                algoResult ? (
+                  <AlgorithmResult
+                    algo={algoResult}
+                    activeLang={preferredLang}
+                    onChangeLang={setPreferredLang}
+                    onSelectRelated={goToAlgorithm}
+                    retryingLang={retryingLang}
+                    onRetryLang={retryLanguageCode}
+                  />
+                ) : (
+                  <IdleState />
+                )
+              ) : problemResult ? (
+                <ProblemResult
+                  result={problemResult}
+                  onGoToAlgorithm={(id) => goToAlgorithm(id)}
                 />
               ) : (
                 <IdleState />
-              )
-            ) : problemResult ? (
-              <ProblemResult
-                result={problemResult}
-                onGoToAlgorithm={(id) => goToAlgorithm(id)}
-              />
-            ) : (
-              <IdleState />
-            ))}
+              )}
+            </ResultErrorBoundary>
+          )}
         </div>
 
         <footer className="pt-4 text-center text-xs text-muted-foreground">
