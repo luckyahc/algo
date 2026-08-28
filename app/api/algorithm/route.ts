@@ -4,7 +4,7 @@ import {
   findExactMatch,
 } from '@/lib/algorithm-catalog'
 import { CATALOG_ID_LIST, generatePartialSafe } from '@/lib/ai'
-import { AlgorithmDetailSchema } from '@/lib/schemas'
+import { AlgorithmDetailSchema, DEFAULT_LANGUAGE, LANGUAGE_LABELS } from '@/lib/schemas'
 
 export const runtime = 'nodejs'
 
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
 - difficulty: 학부 알고리즘 수업/코딩테스트 기준으로 "하", "중", "상" 중 하나를 판단한다.
 - difficultyReason: 그 난이도로 판단한 근거를 2~3문장으로 설명한다.
 - useCases: 이 알고리즘이 실제로 적용되는 문제 유형을 3~5개 나열한다.
-- code: C, C++, Java, Python 네 언어 모두로 이 알고리즘을 구현한 예시 코드를 작성한다. 각 코드는 그대로 컴파일/실행 가능한 수준이어야 하며, 핵심 로직에 짧은 한국어 주석을 단다.
+- code: ${LANGUAGE_LABELS[DEFAULT_LANGUAGE]}로 이 알고리즘을 구현한 예시 코드 하나만 작성한다. 그대로 컴파일/실행 가능한 수준이어야 하며, 핵심 로직에 짧은 한국어 주석을 단다.
 - related: 아래 카탈로그 id 목록 중에서만 골라, 이 알고리즘과 실제로 관련 있는 항목을 최대 6개 적는다. "${entry.id}"(자기 자신)는 절대 포함하지 않는다.
 
 카탈로그 id 목록:
@@ -84,7 +84,9 @@ ${CATALOG_ID_LIST}`,
     difficulty: data.difficulty ?? null,
     difficultyReason: data.difficultyReason ?? null,
     useCases: data.useCases ?? null,
-    code: data.code ?? { c: null, cpp: null, java: null, python: null },
+    // 언어 4개를 한 번에 요청하지 않는다 — 기본 언어(C++)만 채우고 나머지는 사용자가
+    // 그 탭을 열 때 /api/algorithm/code로 그때그때 요청한다 (응답 지연 완화).
+    code: { c: null, cpp: null, java: null, python: null, [DEFAULT_LANGUAGE]: data.code ?? null },
     related,
   })
 }

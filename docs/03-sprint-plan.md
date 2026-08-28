@@ -168,3 +168,20 @@
 - [x] `tsc --noEmit`/`pnpm build` 통과, 신규 항목(데카르트 트리)으로 `/api/algorithm` 실제 호출해 정상 생성 확인
 
 **완료 기준**: 신규 48개 항목이 검색·생성 가능하고, 기존 225개 항목 동작에 회귀가 없다.
+
+---
+
+## Sprint 9 — 언어별 코드 지연 생성으로 응답 지연 완화 (신규, 2026-08-28)
+
+**배경**: Sprint 7~8에서 예고했던 위험이 실제로 발생했다 — 사용자가 실사용 중 "응답 시간이 초과되었다"는 오류를 반복해서 겪었다. 원인은 (1) `REQUEST_TIMEOUT_MS`가 18초로, PRD의 예시값(15~20초)을 그대로 썼는데 (2) 카탈로그가 273개로 커지며 `CATALOG_ID_LIST`가 프롬프트에 ~3,300토큰을 더했고 (3) 무엇보다 `/api/algorithm`이 **매번 C/C++/Java/Python 4개 언어 코드를 전부 한 번에** 요청해 출력 토큰이 크게 늘어난 것 — 실측 10초~2분. 사용자에게 원인을 분석해 보고한 뒤, "필요한 언어만 그때그때 요청 + 기본 언어는 C++"로 아키텍처를 바꿔달라는 요청을 받았다.
+
+**작업**
+- [x] 1차 조치: `REQUEST_TIMEOUT_MS` 18초 → 120초로 상향(`lib/request-timing.ts`) — 근본 원인 조치 전 임시 완화
+- [x] `lib/schemas.ts`: `AlgorithmDetailSchema.code`를 4개 언어 객체에서 **문자열 하나**(기본 언어 코드)로 변경. `DEFAULT_LANGUAGE = 'cpp'` 상수 신설, 서버·클라이언트 양쪽이 이 상수 하나를 기준으로 삼도록 통일
+- [x] `app/api/algorithm/route.ts`: 프롬프트에서 "4개 언어 모두" 대신 기본 언어 하나만 요청하도록 수정. 응답을 병합할 때 `{ c: null, cpp: <생성됨>, java: null, python: null }` 형태로 감싸 와이어 타입(`AlgorithmResultData.code`)은 그대로 유지
+- [x] `app/page.tsx`: `retryLanguageCode` → `fetchLanguageCode`로 일반화(최초 요청과 재시도가 같은 함수), `handleChangeLang` 신설 — 탭을 선택했을 때 해당 언어 코드가 아직 없으면 자동으로 요청을 시작한다(버튼 클릭 없이)
+- [x] `components/language-tabs.tsx`: "아직 안 불러옴(지금 막 요청 중)"과 "요청했지만 실패함"을 구분해서 보여주도록 수정 — 전자는 스피너 + "불러오는 중입니다", 후자만 "불러오지 못했습니다 + 다시 시도" 버튼
+- [x] `tsc --noEmit`/`pnpm build` 통과
+- [x] 실제 검증: `/api/algorithm`(이진 탐색) 최초 요청 **14.1초**로 완료, `code` 필드에 `cpp`만 채워지고 나머지 3개 언어는 `null`로 정확히 내려옴 확인. `/api/algorithm/code`(binary-search, python) 온디맨드 요청도 **21.0초**로 정상 완료 확인
+
+**완료 기준**: 최초 알고리즘 검색이 눈에 띄게 빨라지고(4개 언어 → 1개 언어 생성), 다른 언어 탭을 열면 자동으로 그 언어만 요청되며, 실패 시에만 재시도 버튼이 뜬다. **검증됨** — 위 실측치가 이를 뒷받침한다.

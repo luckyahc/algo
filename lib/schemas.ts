@@ -14,8 +14,11 @@ export const LANGUAGE_LABELS: Record<LanguageKey, string> = {
   python: 'Python',
 }
 
-// 언어별 코드는 nullable — AI가 특정 언어 생성에 실패해도 그 필드만 비어있게 되어
-// 카드 전체가 아니라 해당 언어 탭만 실패로 처리할 수 있다 (PRD 5.19).
+// 최초 진입 시 기본으로 보여주는 언어. PRD 3.2 — 세션 내 다른 언어를 선택하면 그게 유지된다.
+export const DEFAULT_LANGUAGE: LanguageKey = 'cpp'
+
+// 언어별 코드는 nullable — 아직 안 불러왔거나(5.19 관점에서 "필요할 때만 요청") AI가 생성에
+// 실패해도 그 필드만 비어있게 되어 카드 전체가 아니라 해당 언어 탭만 영향을 받는다 (PRD 5.19).
 export const AlgorithmCodeSchema = z.object({
   c: z.string().nullable(),
   cpp: z.string().nullable(),
@@ -23,12 +26,15 @@ export const AlgorithmCodeSchema = z.object({
   python: z.string().nullable(),
 })
 
+// 최초 알고리즘 검색 시 AI에게는 기본 언어(C++) 코드 하나만 요청한다 — 4개 언어를 한 번에
+// 요청하면 출력 토큰이 크게 늘어 응답이 느려지기 때문이다. 나머지 언어는 사용자가 그 탭을
+// 열 때 /api/algorithm/code로 그때그때 요청한다.
 export const AlgorithmDetailSchema = z.object({
   description: z.string().min(1),
   difficulty: z.enum(DIFFICULTIES),
   difficultyReason: z.string().min(1),
   useCases: z.array(z.string().min(1)).min(1),
-  code: AlgorithmCodeSchema,
+  code: z.string().min(1), // 기본 언어(C++) 코드
   // 카탈로그 id를 참조한다. 자기 자신/무효 id 필터링은 서버에서 한 번,
   // 버튼 클릭 시 클라이언트에서 한 번 더 검증한다 (PRD 5.9, 5.10).
   related: z.array(z.string()).max(6),

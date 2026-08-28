@@ -17,6 +17,7 @@ import type {
   LanguageKey,
   ProblemResultData,
 } from '@/lib/schemas'
+import { DEFAULT_LANGUAGE } from '@/lib/schemas'
 import { hasMeaningfulContent } from '@/lib/validation'
 import { AlgorithmCombobox } from '@/components/algorithm-combobox'
 import { AlgorithmResult } from '@/components/algorithm-result'
@@ -54,8 +55,8 @@ export default function Home() {
   )
   const [problemText, setProblemText] = useState('')
   // 최초 진입 시 C++ 기본, 이후 선택한 언어는 세션 동안 유지된다 (PRD 3.2).
-  const [preferredLang, setPreferredLang] = useState<LanguageKey>('cpp')
-  const [retryingLang, setRetryingLang] = useState<LanguageKey | null>(null)
+  const [preferredLang, setPreferredLang] = useState<LanguageKey>(DEFAULT_LANGUAGE)
+  const [loadingLang, setLoadingLang] = useState<LanguageKey | null>(null)
 
   const [inputError, setInputError] = useState<InputError | null>(null)
   const [isOffline, setIsOffline] = useState(false)
@@ -170,10 +171,13 @@ export default function Home() {
     selectAlgorithm(entry)
   }
 
-  async function retryLanguageCode(lang: LanguageKey) {
-    if (!algoResult || retryingLang) return
+  // 언어 하나를 그때그때 요청한다 — 최초 검색 때는 기본 언어(C++) 코드만 받아오고,
+  // 나머지 언어는 사용자가 그 탭을 열 때만 요청해 응답 지연을 줄인다. 탭을 처음 열 때의
+  // "아직 안 불러옴"과 실패 후 "다시 시도" 버튼 클릭이 이 함수 하나로 처리된다.
+  async function fetchLanguageCode(lang: LanguageKey) {
+    if (!algoResult || loadingLang) return
     const algorithmId = algoResult.id
-    setRetryingLang(lang)
+    setLoadingLang(lang)
     try {
       const res = await fetch('/api/algorithm/code', {
         method: 'POST',
@@ -188,7 +192,15 @@ export default function Home() {
           : prev,
       )
     } finally {
-      setRetryingLang(null)
+      setLoadingLang(null)
+    }
+  }
+
+  // 언어 탭 전환. 아직 안 불러온(또는 이전에 실패한) 언어로 옮기면 자동으로 요청한다.
+  function handleChangeLang(lang: LanguageKey) {
+    setPreferredLang(lang)
+    if (algoResult && algoResult.code[lang] === null && loadingLang !== lang) {
+      fetchLanguageCode(lang)
     }
   }
 
@@ -483,10 +495,10 @@ export default function Home() {
                   <AlgorithmResult
                     algo={algoResult}
                     activeLang={preferredLang}
-                    onChangeLang={setPreferredLang}
+                    onChangeLang={handleChangeLang}
                     onSelectRelated={goToAlgorithm}
-                    retryingLang={retryingLang}
-                    onRetryLang={retryLanguageCode}
+                    retryingLang={loadingLang}
+                    onRetryLang={fetchLanguageCode}
                   />
                 ) : (
                   <IdleState />

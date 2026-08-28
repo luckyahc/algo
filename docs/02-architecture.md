@@ -54,24 +54,25 @@ export type CatalogEntry = {
 
 실제 정의는 `lib/schemas.ts`에 있다. 계획 단계와 달라진 점: **`id`/`name`은 AI에게 생성시키지 않는다.** 어차피 카탈로그에 이미 있는 정적 값이라, AI가 스키마 필드로 다시 만들게 하면 오타·재구성 위험만 생긴다. 라우트 핸들러가 AI 응답(`AlgorithmDetail`)에 카탈로그 항목(`id`/`name`/`category`)을 병합해 `AlgorithmResultData`를 만들어 응답한다.
 
+> **2026-08-28 변경**: `code`는 원래 4개 언어를 전부 한 번에 요청했으나, 카탈로그가 273개로 커지면서 실측 응답이 정상적으로도 10초~2분씩 걸리는 문제가 있었다. 4개 언어 코드를 한 번에 생성하는 게 출력 토큰을 가장 많이 잡아먹는 부분이라, **최초 요청은 기본 언어(C++, `DEFAULT_LANGUAGE`) 코드 하나만** 받고 나머지 언어는 그 탭을 열 때 `/api/algorithm/code`로 그때그때 요청하도록 바꿨다. 아래 스키마의 `code`가 그래서 객체가 아니라 문자열 하나다.
+
 ```ts
 const AlgorithmDetailSchema = z.object({
   description: z.string().min(1),
   difficulty: z.enum(['하', '중', '상']),
   difficultyReason: z.string().min(1),
   useCases: z.array(z.string().min(1)).min(1),
-  code: z.object({
-    c: z.string().nullable(),
-    cpp: z.string().nullable(),
-    java: z.string().nullable(),
-    python: z.string().nullable(),
-  }),
+  code: z.string().min(1), // 기본 언어(C++) 코드 하나만
   related: z.array(z.string()).max(6), // catalog id 참조
 })
 
 // 응답 시점에 라우트가 병합:
-// { id, name, category, ...AlgorithmDetail, related: <자기참조/무효id 필터링됨> }
+// { id, name, category, ...AlgorithmDetail,
+//   code: { c: null, cpp: <생성됨>, java: null, python: null },
+//   related: <자기참조/무효id 필터링됨> }
 ```
+
+와이어 타입(`AlgorithmResultData.code`)은 여전히 4개 언어를 다 담는 `AlgorithmCodeSchema` 객체 그대로다 — 화면(`LanguageTabs`)이 4개 언어 슬롯을 이미 그렇게 다루도록 만들어져 있어서, "아직 안 불러온 언어"를 그냥 `null`로 두면 되기 때문이다. 즉 AI에게 무엇을 요청하는지(스키마)만 바뀌었고, 화면에 내려주는 데이터 모양은 그대로다.
 
 `code`의 각 언어 필드는 `nullable`로 두어, 5.19(언어별 부분 실패)를 "필드가 없으면 그 탭만 실패로 표시"로 자연스럽게 처리한다. `related`는 라우트 핸들러가 응답 직후 카탈로그에 존재하지 않는 id와 자기 자신의 id를 필터링한다(5.9, 5.10) — 클라이언트도 렌더링 시 방어적으로 한 번 더 필터링한다.
 
