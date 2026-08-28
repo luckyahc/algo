@@ -2,21 +2,29 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
-import { type Algorithm, searchAlgorithms } from '@/lib/algorithms'
+import { type CatalogEntry, searchCatalog } from '@/lib/algorithm-catalog'
 import { cn } from '@/lib/utils'
 
 export function AlgorithmCombobox({
+  value,
+  onValueChange,
   onSelect,
+  onSubmit,
+  disabled,
 }: {
-  onSelect: (algo: Algorithm) => void
+  value: string
+  onValueChange: (value: string) => void
+  onSelect: (entry: CatalogEntry) => void
+  onSubmit: (rawQuery: string) => void
+  disabled?: boolean
 }) {
-  const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  const matches = useMemo(() => searchAlgorithms(query).slice(0, 8), [query])
+  const matches = useMemo(() => searchCatalog(value).slice(0, 8), [value])
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -28,7 +36,7 @@ export function AlgorithmCombobox({
 
   useEffect(() => {
     setActive(0)
-  }, [query])
+  }, [value])
 
   useEffect(() => {
     const el = listRef.current?.querySelector<HTMLElement>(
@@ -37,10 +45,15 @@ export function AlgorithmCombobox({
     el?.scrollIntoView({ block: 'nearest' })
   }, [active])
 
-  function choose(algo: Algorithm) {
-    setQuery(algo.name)
+  function choose(entry: CatalogEntry) {
+    onValueChange(entry.name)
     setOpen(false)
-    onSelect(algo)
+    onSelect(entry)
+  }
+
+  function submit() {
+    setOpen(false)
+    onSubmit(value)
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -58,7 +71,7 @@ export function AlgorithmCombobox({
     } else if (e.key === 'Enter') {
       e.preventDefault()
       if (open && matches[active]) choose(matches[active])
-      else if (matches[0]) choose(matches[0])
+      else submit()
     } else if (e.key === 'Escape') {
       setOpen(false)
     }
@@ -70,16 +83,18 @@ export function AlgorithmCombobox({
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4.5 -translate-y-1/2 text-muted-foreground" />
           <input
+            ref={inputRef}
             type="text"
-            value={query}
+            value={value}
+            disabled={disabled}
             onChange={(e) => {
-              setQuery(e.target.value)
+              onValueChange(e.target.value)
               setOpen(true)
             }}
             onFocus={() => setOpen(true)}
             onKeyDown={onKeyDown}
             placeholder="알고리즘 이름을 입력하세요 (예: 이진 탐색, DFS, 다익스트라)"
-            className="h-12 w-full rounded-xl border border-border bg-card pl-11 pr-4 text-sm text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/30"
+            className="h-12 w-full rounded-xl border border-border bg-card pl-11 pr-4 text-sm text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
             role="combobox"
             aria-expanded={open}
             aria-controls="algo-listbox"
@@ -88,8 +103,9 @@ export function AlgorithmCombobox({
         </div>
         <button
           type="button"
-          onClick={() => matches[0] && choose(matches[active] ?? matches[0])}
-          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-primary px-6 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
+          disabled={disabled}
+          onClick={submit}
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-primary px-6 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Search className="size-4" />
           검색
@@ -108,27 +124,22 @@ export function AlgorithmCombobox({
               일치하는 알고리즘이 없습니다.
             </li>
           ) : (
-            matches.map((algo, i) => (
-              <li key={algo.id} data-index={i} role="option" aria-selected={i === active}>
+            matches.map((entry, i) => (
+              <li key={entry.id} data-index={i} role="option" aria-selected={i === active}>
                 <button
                   type="button"
                   onMouseEnter={() => setActive(i)}
-                  onClick={() => choose(algo)}
+                  onClick={() => choose(entry)}
                   className={cn(
                     'flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition-colors',
                     i === active ? 'bg-accent' : 'hover:bg-secondary',
                   )}
                 >
-                  <span className="flex flex-col">
-                    <span className="text-sm font-medium text-foreground">
-                      {algo.name}
-                    </span>
-                    <span className="line-clamp-1 text-xs text-muted-foreground">
-                      {algo.description}
-                    </span>
+                  <span className="text-sm font-medium text-foreground">
+                    {entry.name}
                   </span>
                   <span className="shrink-0 rounded-md bg-secondary px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
-                    {algo.category}
+                    {entry.category}
                   </span>
                 </button>
               </li>

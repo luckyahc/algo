@@ -6,34 +6,34 @@
 
 ---
 
-## Sprint 0 — 기반 정비: AI 연동 배관 + 데이터 스키마
+## Sprint 0 — 기반 정비: AI 연동 배관 + 데이터 스키마 ✅ 완료 (2026-08-28)
 
 **목표**: 화면을 건드리기 전에, AI 호출이 가능한 백엔드 골격과 확장된 데이터 구조를 먼저 세운다.
 
 **작업**
-- [ ] AI SDK(v6) 설치, Vercel AI Gateway 연동, 환경변수 설정 (`02-architecture.md` §1 참고)
-- [ ] `lib/algorithm-catalog.ts` 작성: 정렬/탐색/그래프/트리/DP/그리디/분할정복/백트래킹·완전탐색/문자열/수학·정수론/자료구조 전 분야를 아우르는 알고리즘 이름·별칭·카테고리 목록 (PRD 3.1의 "사실상 모든 알고리즘" 요구, 최소 80개 이상 목표)
-- [ ] `AlgorithmDetailSchema`, `ProblemAnalysisSchema` (Zod) 작성 (`02-architecture.md` §3)
-- [ ] `app/api/algorithm/route.ts`, `app/api/problem/route.ts` 뼈대 작성 (`generateObject` 연동, 우선 프롬프트는 단순하게)
-- [ ] 기존 `lib/algorithms.ts`의 하드코딩 상세 데이터는 제거하거나 시드/테스트용으로만 남김
+- [x] AI SDK(`ai@7`) 설치, Vercel AI Gateway 연동(`model: 'anthropic/claude-sonnet-5'` 문자열로 기본 provider 사용), `.env.local.example`에 `AI_GATEWAY_API_KEY` 문서화 (`02-architecture.md` §1 참고)
+- [x] `lib/algorithm-catalog.ts` 작성: 정렬/탐색/그래프/트리/DP/그리디/분할정복/백트래킹·완전탐색/문자열/수학·정수론/자료구조/배열 전 분야, 82개 항목의 알고리즘 이름·별칭·카테고리 목록 (PRD 3.1)
+- [x] `AlgorithmDetailSchema`, `ProblemAnalysisSchema` (Zod, `lib/schemas.ts`) 작성 — `ProblemAnalysisSchema`는 정의만 해두고 실제 연동은 Sprint 2에서 (`02-architecture.md` §3)
+- [x] `app/api/algorithm/route.ts` 작성 (`generateObject` 연동). `app/api/problem/route.ts`는 Sprint 2로 미룸(아직 문제 검색이 mock이라 불필요)
+- [x] `lib/algorithms.ts`의 하드코딩 상세 데이터 제거, 문제 검색용 mock 타입/데이터만 남김
 
-**완료 기준**: `curl`/API 클라이언트로 두 라우트를 직접 호출했을 때 스키마에 맞는 JSON이 반환된다. (화면 연동은 아직 없음)
+**완료 기준**: ✅ `POST /api/algorithm`을 빈 값/무효 이름/유효 이름으로 각각 호출했을 때 400/404/(AI 키가 있다면 200, 없으면 502)가 스키마에 맞게 반환됨을 확인 (node fetch로 검증). 화면 연동은 Sprint 1에서 진행.
 
 ---
 
-## Sprint 1 — 기능 A: 알고리즘 검색 실동작
+## Sprint 1 — 기능 A: 알고리즘 검색 실동작 ✅ 코드 완료 · ⚠️ AI 응답 미검증 (2026-08-28)
 
 **목표**: PRD 4장 "기능 A" 전체와 Done Criteria #1, #3.
 
 **작업**
-- [ ] `page.tsx`의 mock `setTimeout` 로직을 `/api/algorithm` 실제 호출로 교체
-- [ ] `AlgorithmCombobox`가 `algorithm-catalog.ts` 전체를 대상으로 부분 문자열 매칭 자동완성 제공 (PRD 3.1)
-- [ ] `CodeBlock`을 언어 탭(C/C++/Java/Python) 구조로 확장, 최초 진입 시 C++ 기본, 이후 세션 내 선택 유지 (PRD 3.2)
-- [ ] 관련 알고리즘 버튼: 자기 자신 필터링 (5.10), 카탈로그 대조 후 무효 시 5.3과 동일 처리 + 검색창 자동 채움 (5.9)
-- [ ] 검색 실행 시점에 입력값이 카탈로그와 정확히 일치하는지 검증, 불일치 시 AI 호출 차단 + 유사 후보 재노출 (5.3)
-- [ ] 복사 버튼이 "현재 활성 언어 탭의 코드만" 복사하는지 확인
+- [x] `page.tsx`의 mock `setTimeout` 로직을 `/api/algorithm` 실제 호출로 교체
+- [x] `AlgorithmCombobox`가 `algorithm-catalog.ts` 전체(82개)를 대상으로 부분 문자열 매칭 자동완성 제공, 페이지가 값을 제어(controlled)하도록 리팩터링 (PRD 3.1)
+- [x] `CodeBlock`/`LanguageTabs`를 언어 탭(C/C++/Java/Python) 구조로 확장, 최초 진입 시 C++ 기본, 이후 세션 내(`page.tsx`의 `preferredLang` state) 선택 유지 (PRD 3.2)
+- [x] 관련 알고리즘 버튼: 서버(`route.ts`)에서 자기 자신·무효 id 필터링(5.10) + 클라이언트에서 방어적으로 한 번 더 필터링, 그래도 무효하면 5.3과 동일한 `invalid` 상태로 전환 + 검색창 자동 채움 (5.9)
+- [x] 검색 실행 시점에 입력값이 카탈로그와 정확히 일치하는지 클라이언트(`findExactMatch`)와 서버 양쪽에서 검증, 불일치 시 AI 호출 차단 + `InvalidAlgorithmState` 표시, 유사 후보는 자동완성 드롭다운에 그대로 노출 (5.3)
+- [x] 카드 우측 상단 복사 버튼이 "현재 활성 언어 탭의 코드만" 복사하도록 `activeLang` 기준으로 연결
 
-**완료 기준**: 카탈로그에 있는 임의의 알고리즘 이름을 입력 → 검색하면 설명/난이도(근거)/사용처/4개 언어 코드/관련 알고리즘 버튼이 렌더링되고, 버튼을 눌러 몇 단계를 이동해도 항상 같은 형식의 결과 화면으로 이어진다.
+**완료 기준 검증 상태**: 서버 로직은 node fetch로 3가지 케이스(빈 입력→400, 목록에 없는 이름→404+추천, 유효한 이름→AI 호출 시도) 모두 의도대로 동작함을 확인. `pnpm build`/`tsc --noEmit` 통과. **다만 로컬에 `AI_GATEWAY_API_KEY`가 설정되어 있지 않아, 실제 AI가 생성한 알고리즘 상세 내용이 화면에 정상적으로 렌더링되는지(성공 경로)는 아직 눈으로 검증하지 못했다.** 키가 있다면 유효한 이름 호출이 200과 `AlgorithmDetailSchema`를 반환하는지, 화면의 4개 언어 탭/관련 알고리즘 버튼이 실제로 채워지는지 재확인이 필요하다.
 
 ---
 

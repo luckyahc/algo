@@ -3,61 +3,110 @@
 import { useRef, useState } from 'react'
 import { Binary, Search, SendHorizonal } from 'lucide-react'
 import {
-  type Algorithm,
-  getAlgorithm,
+  type CatalogEntry,
+  findExactMatch,
+  getCatalogEntry,
+} from '@/lib/algorithm-catalog'
+import {
   MOCK_PROBLEM_RESULT,
   type ProblemResult as ProblemResultType,
 } from '@/lib/algorithms'
+import type { AlgorithmResultData, LanguageKey } from '@/lib/schemas'
 import { AlgorithmCombobox } from '@/components/algorithm-combobox'
 import { AlgorithmResult } from '@/components/algorithm-result'
 import { ProblemResult } from '@/components/problem-result'
 import {
   ErrorState,
   IdleState,
+  InvalidAlgorithmState,
   LoadingState,
 } from '@/components/result-states'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { cn } from '@/lib/utils'
 
 type Tab = 'algorithm' | 'problem'
-type Status = 'idle' | 'loading' | 'success' | 'error'
+type Status = 'idle' | 'loading' | 'success' | 'error' | 'invalid'
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>('algorithm')
   const [status, setStatus] = useState<Status>('idle')
-  const [algoResult, setAlgoResult] = useState<Algorithm | null>(null)
+  const [query, setQuery] = useState('')
+  const [algoResult, setAlgoResult] = useState<AlgorithmResultData | null>(null)
   const [problemResult, setProblemResult] = useState<ProblemResultType | null>(
     null,
   )
   const [problemText, setProblemText] = useState('')
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // 최초 진입 시 C++ 기본, 이후 선택한 언어는 세션 동안 유지된다 (PRD 3.2).
+  const [preferredLang, setPreferredLang] = useState<LanguageKey>('cpp')
   const lastAction = useRef<(() => void) | null>(null)
 
-  function runWithLoading(action: () => void) {
-    if (timer.current) clearTimeout(timer.current)
-    lastAction.current = () => runWithLoading(action)
+  const isLoading = status === 'loading'
+
+  async function runAlgorithmFetch(entry: CatalogEntry) {
+    lastAction.current = () => runAlgorithmFetch(entry)
     setStatus('loading')
-    timer.current = setTimeout(() => {
-      action()
+    try {
+      const res = await fetch('/api/algorithm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: entry.name }),
+      })
+      if (!res.ok) {
+        if (res.status === 404) {
+          setStatus('invalid')
+          return
+        }
+        setStatus('error')
+        return
+      }
+      const data = (await res.json()) as AlgorithmResultData
+      setAlgoResult(data)
       setStatus('success')
-    }, 650)
+    } catch {
+      setStatus('error')
+    }
   }
 
-  function selectAlgorithm(algo: Algorithm) {
+  function selectAlgorithm(entry: CatalogEntry) {
     setTab('algorithm')
-    runWithLoading(() => setAlgoResult(algo))
+    setQuery(entry.name)
+    runAlgorithmFetch(entry)
   }
 
-  function goToAlgorithm(id: string) {
-    const algo = getAlgorithm(id)
-    if (!algo) return
+  function handleAlgorithmSubmit(raw: string) {
+    if (isLoading) return
+    const trimmed = raw.trim()
+    if (!trimmed) return // 빈 입력 처리(문구/포커스 강조)는 Sprint 3에서 보강
+    const entry = findExactMatch(trimmed)
+    if (!entry) {
+      setStatus('invalid')
+      return
+    }
+    selectAlgorithm(entry)
+  }
+
+  // 관련 알고리즘 / "사용해야 되는 알고리즘" 버튼 클릭 공통 처리.
+  // 서버가 이미 카탈로그에 없는 id는 걸러서 내려주지만(5.10), 방어적으로 한 번 더
+  // 유효성을 검증한다 — 무효하면 5.3과 동일한 상태로 전환한다 (PRD 5.9).
+  function goToAlgorithm(id: string, rawName?: string) {
+    const entry = getCatalogEntry(id)
     setTab('algorithm')
-    runWithLoading(() => setAlgoResult(algo))
+    if (!entry) {
+      setQuery(rawName ?? id)
+      setStatus('invalid')
+      return
+    }
+    selectAlgorithm(entry)
   }
 
   function searchProblem() {
-    if (!problemText.trim()) return
-    runWithLoading(() => setProblemResult(MOCK_PROBLEM_RESULT))
+    if (isLoading || !problemText.trim()) return
+    lastAction.current = () => searchProblem()
+    setStatus('loading')
+    setTimeout(() => {
+      setProblemResult(MOCK_PROBLEM_RESULT)
+      setStatus('success')
+    }, 650)
   }
 
   function switchTab(next: Tab) {
@@ -73,6 +122,7 @@ export default function Home() {
     loading: { label: '불러오는 중', dot: 'bg-medium-foreground animate-pulse' },
     success: { label: '결과 표시됨', dot: 'bg-easy-foreground' },
     error: { label: '오류 발생', dot: 'bg-destructive' },
+    invalid: { label: '검색어 확인 필요', dot: 'bg-medium-foreground' },
   }
 
   return (
@@ -134,20 +184,27 @@ export default function Home() {
 
           {/* 입력 필드 */}
           {tab === 'algorithm' ? (
-            <AlgorithmCombobox onSelect={selectAlgorithm} />
+            <AlgorithmCombobox
+              value={query}
+              onValueChange={setQuery}
+              onSelect={selectAlgorithm}
+              onSubmit={handleAlgorithmSubmit}
+              disabled={isLoading}
+            />
           ) : (
             <div className="flex flex-col gap-2">
               <textarea
                 value={problemText}
                 onChange={(e) => setProblemText(e.target.value)}
                 rows={5}
+                disabled={isLoading}
                 placeholder="풀고 싶은 문제 상황을 자유롭게 적어보세요. 예) 정렬된 수열에서 합이 특정 값이 되는 두 수를 찾고 싶어요."
-                className="w-full resize-y rounded-xl border border-border bg-card p-4 text-sm leading-relaxed text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/30"
+                className="w-full resize-y rounded-xl border border-border bg-card p-4 text-sm leading-relaxed text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
               />
               <button
                 type="button"
                 onClick={searchProblem}
-                disabled={!problemText.trim()}
+                disabled={isLoading || !problemText.trim()}
                 className="inline-flex h-11 items-center justify-center gap-2 self-end rounded-xl bg-primary px-6 text-sm font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <SendHorizonal className="size-4" />
@@ -160,45 +217,20 @@ export default function Home() {
         {/* 결과부 */}
         <div className="flex flex-col gap-4">
           {/* 상태 표시줄 */}
-          <div className="flex items-center justify-between border-b border-border pb-3">
-            <div className="flex items-center gap-2">
-              <span
-                className={cn('size-2 rounded-full', statusMeta[status].dot)}
-                aria-hidden
-              />
-              <span className="text-sm font-medium text-foreground">
-                {statusMeta[status].label}
-              </span>
-            </div>
-            {/* 디자인 초안용 상태 미리보기 */}
-            <div className="flex items-center gap-1 rounded-lg bg-secondary p-0.5">
-              <span className="px-1.5 text-[11px] text-muted-foreground">
-                상태 미리보기
-              </span>
-              {(['idle', 'loading', 'error'] as const).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => {
-                    if (timer.current) clearTimeout(timer.current)
-                    setStatus(s)
-                  }}
-                  className={cn(
-                    'rounded-md px-2 py-1 text-[11px] font-medium capitalize transition-colors',
-                    status === s
-                      ? 'bg-card text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
+          <div className="flex items-center gap-2 border-b border-border pb-3">
+            <span
+              className={cn('size-2 rounded-full', statusMeta[status].dot)}
+              aria-hidden
+            />
+            <span className="text-sm font-medium text-foreground">
+              {statusMeta[status].label}
+            </span>
           </div>
 
           {/* 상태별 콘텐츠 */}
           {status === 'idle' && <IdleState />}
           {status === 'loading' && <LoadingState />}
+          {status === 'invalid' && tab === 'algorithm' && <InvalidAlgorithmState />}
           {status === 'error' && (
             <ErrorState
               onRetry={() => {
@@ -212,7 +244,9 @@ export default function Home() {
               algoResult ? (
                 <AlgorithmResult
                   algo={algoResult}
-                  onSelectRelated={selectAlgorithm}
+                  activeLang={preferredLang}
+                  onChangeLang={setPreferredLang}
+                  onSelectRelated={goToAlgorithm}
                 />
               ) : (
                 <IdleState />
@@ -220,7 +254,7 @@ export default function Home() {
             ) : problemResult ? (
               <ProblemResult
                 result={problemResult}
-                onGoToAlgorithm={goToAlgorithm}
+                onGoToAlgorithm={(id) => goToAlgorithm(id)}
               />
             ) : (
               <IdleState />
@@ -228,7 +262,8 @@ export default function Home() {
         </div>
 
         <footer className="pt-4 text-center text-xs text-muted-foreground">
-          모든 데이터는 학습용 예시(mock)이며 실제 판단과 다를 수 있습니다.
+          알고리즘 설명은 AI가 생성하며 실제와 다를 수 있습니다. 문제 검색은 아직
+          예시(mock) 데이터입니다.
         </footer>
       </div>
     </div>

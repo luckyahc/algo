@@ -2,47 +2,56 @@
 
 import { useState, type ReactNode } from 'react'
 import { Check, Copy } from 'lucide-react'
+import type { LanguageKey } from '@/lib/schemas'
 import { cn } from '@/lib/utils'
 
-const KEYWORDS = new Set([
-  'def',
-  'return',
-  'if',
-  'elif',
-  'else',
-  'for',
-  'while',
-  'in',
-  'and',
-  'or',
-  'not',
-  'import',
-  'from',
-  'class',
-  'lambda',
-  'continue',
-  'break',
-  'pass',
-  'None',
-  'True',
-  'False',
-  'range',
-  'len',
-  'max',
-  'min',
-  'sum',
-  'print',
-  'set',
-  'sort',
-  'append',
-  'float',
-  'int',
+const PYTHON_KEYWORDS = new Set([
+  'def', 'return', 'if', 'elif', 'else', 'for', 'while', 'in', 'and', 'or',
+  'not', 'import', 'from', 'class', 'lambda', 'continue', 'break', 'pass',
+  'None', 'True', 'False', 'range', 'len', 'max', 'min', 'sum', 'print',
+  'set', 'sort', 'append', 'float', 'int',
 ])
 
-const TOKEN_RE =
-  /(#[^\n]*)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\b\d+\.?\d*\b)|([A-Za-z_]\w*)|(\s+)|([^\s\w])/g
+const C_KEYWORDS = new Set([
+  'int', 'char', 'float', 'double', 'long', 'short', 'unsigned', 'signed',
+  'void', 'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'default',
+  'break', 'continue', 'return', 'struct', 'typedef', 'union', 'enum',
+  'const', 'static', 'extern', 'sizeof', 'NULL', 'include', 'define',
+  'printf', 'scanf', 'malloc', 'free', 'main',
+])
 
-function highlightLine(line: string, keyPrefix: string): ReactNode[] {
+const CPP_KEYWORDS = new Set([
+  ...C_KEYWORDS,
+  'class', 'public', 'private', 'protected', 'namespace', 'using', 'std',
+  'cout', 'cin', 'endl', 'new', 'delete', 'template', 'typename', 'vector',
+  'string', 'bool', 'true', 'false', 'nullptr', 'auto', 'virtual',
+  'override', 'this', 'try', 'catch', 'throw', 'push_back', 'begin', 'end',
+])
+
+const JAVA_KEYWORDS = new Set([
+  'public', 'private', 'protected', 'class', 'static', 'void', 'int',
+  'long', 'double', 'float', 'boolean', 'char', 'String', 'new', 'if',
+  'else', 'for', 'while', 'do', 'switch', 'case', 'default', 'break',
+  'continue', 'return', 'import', 'package', 'System', 'out', 'println',
+  'ArrayList', 'List', 'Map', 'HashMap', 'true', 'false', 'null', 'try',
+  'catch', 'throw', 'extends', 'implements', 'interface', 'final',
+])
+
+const KEYWORDS_BY_LANG: Record<LanguageKey, Set<string>> = {
+  python: PYTHON_KEYWORDS,
+  c: C_KEYWORDS,
+  cpp: CPP_KEYWORDS,
+  java: JAVA_KEYWORDS,
+}
+
+const TOKEN_RE =
+  /(#[^\n]*|\/\/[^\n]*)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\b\d+\.?\d*\b)|([A-Za-z_]\w*)|(\s+)|([^\s\w])/g
+
+function highlightLine(
+  line: string,
+  keyPrefix: string,
+  keywords: Set<string>,
+): ReactNode[] {
   const nodes: ReactNode[] = []
   let match: RegExpExecArray | null
   let idx = 0
@@ -69,7 +78,7 @@ function highlightLine(line: string, keyPrefix: string): ReactNode[] {
         </span>,
       )
     } else if (word) {
-      if (KEYWORDS.has(word)) {
+      if (keywords.has(word)) {
         nodes.push(
           <span key={key} className="text-code-keyword">
             {word}
@@ -100,14 +109,17 @@ function highlightLine(line: string, keyPrefix: string): ReactNode[] {
 export function CodeBlock({
   source,
   label,
+  lang = 'python',
   className,
 }: {
   source: string
   label?: string
+  lang?: LanguageKey
   className?: string
 }) {
   const [copied, setCopied] = useState(false)
   const lines = source.replace(/\n$/, '').split('\n')
+  const keywords = KEYWORDS_BY_LANG[lang]
 
   async function copy() {
     try {
@@ -165,7 +177,7 @@ export function CodeBlock({
                   {i + 1}
                 </span>
                 <span className="whitespace-pre pr-4">
-                  {line ? highlightLine(line, `l${i}`) : ' '}
+                  {line ? highlightLine(line, `l${i}`, keywords) : ' '}
                 </span>
               </span>
             ))}

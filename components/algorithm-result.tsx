@@ -1,10 +1,11 @@
 'use client'
 
 import { ArrowRight, Info, ListChecks, Sparkles } from 'lucide-react'
-import { type Algorithm, getAlgorithm } from '@/lib/algorithms'
-import { CodeBlock } from '@/components/code-block'
+import { getCatalogEntry } from '@/lib/algorithm-catalog'
+import type { AlgorithmResultData, LanguageKey } from '@/lib/schemas'
 import { CopyButton } from '@/components/copy-button'
-import { ComplexityBadge, DifficultyBadge } from '@/components/difficulty-badge'
+import { DifficultyBadge } from '@/components/difficulty-badge'
+import { LanguageTabs } from '@/components/language-tabs'
 
 function Card({
   children,
@@ -24,14 +25,23 @@ function Card({
 
 export function AlgorithmResult({
   algo,
+  activeLang,
+  onChangeLang,
   onSelectRelated,
 }: {
-  algo: Algorithm
-  onSelectRelated: (algo: Algorithm) => void
+  algo: AlgorithmResultData
+  activeLang: LanguageKey
+  onChangeLang: (lang: LanguageKey) => void
+  onSelectRelated: (id: string, rawName: string) => void
 }) {
+  // 자기 자신을 가리키는 관련 알고리즘은 화면에 만들지 않는다 (PRD 5.10) — 서버에서도
+  // 걸러내지만, 방어적으로 한 번 더 제거한다.
   const related = algo.related
-    .map((id) => getAlgorithm(id))
-    .filter((a): a is Algorithm => Boolean(a))
+    .filter((id) => id !== algo.id)
+    .map((id) => getCatalogEntry(id))
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+
+  const activeCode = algo.code[activeLang]
 
   return (
     <div className="flex flex-col gap-4">
@@ -55,16 +65,11 @@ export function AlgorithmResult({
 
       {/* 2. 난이도 */}
       <Card>
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <DifficultyBadge level={algo.difficulty} />
-              <ComplexityBadge value={algo.timeComplexity} />
-            </div>
-            <div className="flex items-start gap-2 text-sm leading-relaxed text-muted-foreground">
-              <Info className="mt-0.5 size-4 shrink-0 text-primary" />
-              <p className="text-pretty">{algo.difficultyReason}</p>
-            </div>
+        <div className="flex flex-col gap-3">
+          <DifficultyBadge level={algo.difficulty} />
+          <div className="flex items-start gap-2 text-sm leading-relaxed text-muted-foreground">
+            <Info className="mt-0.5 size-4 shrink-0 text-primary" />
+            <p className="text-pretty">{algo.difficultyReason}</p>
           </div>
         </div>
       </Card>
@@ -92,30 +97,30 @@ export function AlgorithmResult({
         </ul>
       </Card>
 
-      {/* 4. 예시 코드 */}
+      {/* 4. 예시 코드 (언어 탭) */}
       <Card className="overflow-hidden">
         <div className="mb-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <Sparkles className="size-4.5 text-primary" />
             <h3 className="text-base font-semibold text-foreground">예시 코드</h3>
           </div>
-          <CopyButton text={algo.code.source} label="코드" />
+          <CopyButton text={activeCode ?? ''} label="코드" />
         </div>
-        <CodeBlock source={algo.code.source} label={algo.code.label} />
+        <LanguageTabs code={algo.code} activeLang={activeLang} onChangeLang={onChangeLang} />
       </Card>
 
       {/* 관련 알고리즘 */}
-      {related.length > 0 && (
-        <div className="rounded-2xl border border-dashed border-border bg-card/50 p-5">
-          <h3 className="mb-3 text-sm font-semibold text-foreground">
-            관련된 알고리즘 보기
-          </h3>
+      <div className="rounded-2xl border border-dashed border-border bg-card/50 p-5">
+        <h3 className="mb-3 text-sm font-semibold text-foreground">
+          관련된 알고리즘 보기
+        </h3>
+        {related.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {related.map((r) => (
               <button
                 key={r.id}
                 type="button"
-                onClick={() => onSelectRelated(r)}
+                onClick={() => onSelectRelated(r.id, r.name)}
                 className="group inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3.5 py-1.5 text-sm font-medium text-foreground transition-colors hover:border-primary hover:bg-accent hover:text-accent-foreground"
               >
                 {r.name}
@@ -123,8 +128,10 @@ export function AlgorithmResult({
               </button>
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <p className="text-sm text-muted-foreground">관련된 알고리즘이 없습니다.</p>
+        )}
+      </div>
     </div>
   )
 }

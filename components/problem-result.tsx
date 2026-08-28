@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { ArrowRight, Info, Lightbulb, Puzzle } from 'lucide-react'
-import { getAlgorithm, type ProblemResult as ProblemResultType } from '@/lib/algorithms'
+import { getCatalogEntry } from '@/lib/algorithm-catalog'
+import type { ProblemResult as ProblemResultType } from '@/lib/algorithms'
 import { CopyButton } from '@/components/copy-button'
 import { ComplexityBadge, DifficultyBadge } from '@/components/difficulty-badge'
 import { cn } from '@/lib/utils'
@@ -32,7 +33,7 @@ export function ProblemResult({
 }) {
   const [activeSol, setActiveSol] = useState(0)
   const solution = result.solutions[activeSol]
-  const targetAlgo = getAlgorithm(solution.algorithmId)
+  const targetAlgo = getCatalogEntry(solution.algorithmId)
 
   return (
     <div className="flex flex-col gap-4">
