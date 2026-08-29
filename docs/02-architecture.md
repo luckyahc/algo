@@ -18,16 +18,17 @@
 
 Route Handler는 Next.js App Router 방식(`app/api/*/route.ts`)을 쓴다:
 
-- `POST /api/algorithm` — `{ name: string }` → `AlgorithmDetail` **(구현됨)**
-- `POST /api/problem` — `{ description: string }` → `ProblemAnalysis` **(구현됨)**
-- `POST /api/algorithm/code` — `{ algorithmId: string, lang: string }` → 언어 1개 코드만 재생성 (5.19 부분 재시도용) **(구현됨, Sprint 3)**
+- `POST /api/algorithm` — `{ name: string }` → `AlgorithmDetail`(기본 언어 C++ 코드 하나만 포함) **(구현됨)**
+- `POST /api/problem` — `{ description: string }` → `ProblemAnalysis`(추천 풀이 하나에만 C++ 코드 포함) **(구현됨)**
+- `POST /api/algorithm/code` — `{ algorithmId: string, lang: string }` → 언어 1개 코드만 (재)생성, 최초 검색 시 기본 언어 외 언어를 탭으로 열 때도 이 라우트를 쓴다 (5.19) **(구현됨, Sprint 3·9)**
+- `POST /api/problem/code` — `{ problem: string, algorithmId: string, label: string, explanation: string }` → 특정 풀이 하나의 C++ 코드만 (재)생성. 문제/풀이가 서버에 저장되지 않으므로 클라이언트가 맥락을 매번 그대로 다시 보낸다 **(구현됨, Sprint 10)**
 
-`lib/ai.ts`에 세 라우트가 공유하는 `MODEL`(`anthropic/claude-sonnet-5`), `CATALOG_ID_LIST`(프롬프트에 넣는 카탈로그 id 목록 문자열), `generatePartialSafe`(아래 §3.2 참고)를 모아 중복을 없앴다.
+`lib/ai.ts`에 네 라우트가 공유하는 `MODEL`(`google('gemini-3.6-flash')`, `@ai-sdk/google` 직접 호출), `CATALOG_ID_LIST`(프롬프트에 넣는 카탈로그 id 목록 문자열), `generatePartialSafe`(아래 §3.2 참고)를 모아 중복을 없앴다.
 
 각 라우트는:
 1. 입력 검증(빈 값, 유효 알고리즘 목록 대조, 무의미한 텍스트, 글자 수 등)을 **AI 호출 전에** 서버에서도 한 번 더 수행한다(클라이언트 검증 우회 방지). `/api/algorithm`은 빈 값은 400, 카탈로그에 없는 이름은 404 + 유사 후보를 반환하고, `/api/problem`은 빈 값·3000자 초과(`TOO_LONG`)·무의미한 텍스트(`lib/validation.ts`의 `hasMeaningfulContent`)를 모두 400으로 반환한다 — 전부 AI 호출 없이 즉시 응답한다.
 2. `generatePartialSafe`(내부적으로 `generateObject`를 감쌈)로 AI 호출, Zod 스키마로 파싱.
-3. 실패 시 에러 코드를 포함한 JSON을 반환해 프론트엔드가 5장의 상태 문구와 매핑할 수 있게 한다. 세 라우트가 실제로 반환하는 코드: `INVALID_INPUT`(400, 공통) / `NOT_FOUND`(404, `/api/algorithm`·`/api/algorithm/code`, `suggestions` 동봉은 전자만) / `MEANINGLESS_INPUT`(400, `/api/problem`만) / `TOO_LONG`(400, `/api/problem`만) / `UPSTREAM_ERROR`(502, AI 호출이 완전히 실패했을 때 — 인증 오류든 부분 파싱조차 실패했든 전부 여기로 뭉뚱그린다). 별도의 `TIMEOUT` 코드는 서버에 없다 — 타임아웃은 클라이언트가 `AbortController`로 직접 만들어내는 상태이지 서버 응답 코드가 아니기 때문이다(§4 참고).
+3. 실패 시 에러 코드를 포함한 JSON을 반환해 프론트엔드가 5장의 상태 문구와 매핑할 수 있게 한다. 네 라우트가 실제로 반환하는 코드: `INVALID_INPUT`(400, 공통) / `NOT_FOUND`(404, `/api/algorithm`·`/api/algorithm/code`, `suggestions` 동봉은 전자만) / `MEANINGLESS_INPUT`(400, `/api/problem`만) / `TOO_LONG`(400, `/api/problem`·`/api/problem/code`) / `RATE_LIMITED`(429, Google API 429 감지 시 네 라우트 공통) / `UPSTREAM_ERROR`(502, AI 호출이 완전히 실패했을 때 — 인증 오류든 부분 파싱조차 실패했든 전부 여기로 뭉뚱그린다). 별도의 `TIMEOUT` 코드는 서버에 없다 — 타임아웃은 클라이언트가 `AbortController`로 직접 만들어내는 상태이지 서버 응답 코드가 아니기 때문이다(§4 참고).
 
 ## 3. 데이터 스키마
 
@@ -59,7 +60,7 @@ export type CatalogEntry = {
 ```ts
 const AlgorithmDetailSchema = z.object({
   description: z.string().min(1),
-  difficulty: z.enum(['하', '중', '상']),
+  difficulty: DifficultySchema, // 1~10 정수, 아래 참고
   difficultyReason: z.string().min(1),
   useCases: z.array(z.string().min(1)).min(1),
   code: z.string().min(1), // 기본 언어(C++) 코드 하나만
@@ -89,10 +90,11 @@ export const ProblemSolutionSchema = z.object({
   explanation: z.string().min(1),  // 문제의 어느 부분이 이 알고리즘을 암시하는지
   timeComplexity: z.string().min(1),
   recommended: z.boolean(), // 기본 활성 탭 판단
+  code: z.string().nullable(), // 추천 풀이 하나에만 채워짐(아래 참고)
 })
 
 export const ProblemAnalysisSchema = z.object({
-  difficulty: z.enum(['하', '중', '상']),
+  difficulty: DifficultySchema, // 1~10 정수, 아래 참고
   difficultyReason: z.string().min(1),
   matched: z.boolean(), // false면 5.8(매칭 알고리즘 없음) — 정상 성공으로 취급
   solutions: z.array(ProblemSolutionSchema).max(5),
@@ -100,6 +102,10 @@ export const ProblemAnalysisSchema = z.object({
 ```
 
 여기도 `generatePartialSafe`를 거친다(위 §3.2 참고). `ProblemResultData`의 `difficulty`/`difficultyReason`은 `| null`로 정의해 실패 시 placeholder를 보여준다. 다만 `solutions`는 **부분 항목을 만들지 않는다** — 배열 필드 자체가 필드 단위 검증 대상이라, 배열 안의 풀이 하나라도 스키마를 어기면 `solutions` 필드 전체가 통째로 탈락한다(빈 배열 취급). 풀이 하나만 절반만 채워진 상태로 보여주는 것보다, 아예 안 보여주고 5.8("매칭 알고리즘 없음")과 같은 안내로 대체하는 편이 사용자에게 덜 혼란스럽다고 판단했다.
+
+**Sprint 11: 난이도를 하/중/상 3단계에서 1~10 10단계로 바꿨다.** 사용자 요청 — "10단계로 나눠줘. 10단계의 기준은 현재까지 나온 알고리즘 중 최악의 난이도를 기준으로 해줘." `lib/schemas.ts`의 `DifficultySchema = z.number().int().min(1).max(10)`으로 교체(`AlgorithmDetailSchema`·`ProblemAnalysisSchema` 둘 다 공유). 채점 기준은 `lib/ai.ts`의 `DIFFICULTY_SCALE_PROMPT` 하나로 두 라우트가 공유해 기준이 어긋나지 않게 했다 — **10점은 카탈로그에서 가장 어려운 축의 실제 항목(블라섬 알고리즘/매트로이드 교차/링크-컷 트리/Gomory-Hu 트리/일반화 접미사 자동자)에 명시적으로 앵커링**하고, 1~2점은 반복문 수준(선형 탐색 등)에 앵커링했다. `clampDifficulty`(`lib/schemas.ts`)로 서버 응답 시점에 한 번, `DifficultyBadge`(`components/difficulty-badge.tsx`)에서 렌더링 직전에 한 번 더 1~10으로 방어적 클램프한다. 배지 색상은 기존 `--easy/--medium/--hard`(3단계, 다른 배지에서 재사용 중이라 건드리지 않음) 대신 `app/globals.css`에 새로 추가한 `--diff-1-bg/-fg` ~ `--diff-10-bg/-fg`(초록 155도 → 빨강 20도 10단 그라데이션, 라이트/다크 모드 각각) CSS 변수를 인라인 스타일로 직접 참조한다. 실제 검증(로컬, 실제 Gemini 응답): 선형 탐색 → 1, 다익스트라 → 5, 블라섬 알고리즘 → 10 — 앵커가 의도대로 작동함을 확인.
+
+**Sprint 10: 문제 검색 결과에도 예시 코드를 추가했다.** 사용자가 "문제를 넣거나 리스트에 없는 알고리즘을 넣어도 코드 블록을 생성해줬으면 좋겠다"고 요청 — `/api/algorithm`이 기본 언어 코드 하나만 upfront로 생성하는 것과 동일한 패턴으로, `/api/problem`의 프롬프트가 **recommended 풀이 하나에만** C++ 코드를 채우도록 지시하고 나머지 풀이는 `code: null`로 둔다(5개 풀이 전부에 코드를 매번 생성하면 Sprint 9에서 고친 것과 같은 지연 문제가 재발할 수 있어서). 사용자가 비추천 풀이 탭을 열면(또는 재시도하면) `POST /api/problem/code`가 그 풀이의 문제/설명 맥락을 그대로 받아 코드 하나만 다시 생성한다 — 문제/풀이는 서버에 저장되지 않는 stateless 구조라 클라이언트가 필요한 정보(`problem`, `algorithmId`, `label`, `explanation`)를 매번 다시 보낸다. `algorithmId`가 카탈로그에 없는 경우도 있을 수 있어(자유 텍스트 설명이 카탈로그 밖 개념을 가리킬 때) 라우트는 `getCatalogEntry`로 카탈로그 이름을 찾되 실패하면 `label`을 그대로 프롬프트에 쓴다.
 
 ## 4. 프론트엔드 상태 관리 (구현됨, Sprint 3에서 계획대로 리팩터링 완료)
 

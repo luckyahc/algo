@@ -63,6 +63,12 @@ export default function Home() {
   // 최초 진입 시 C++ 기본, 이후 선택한 언어는 세션 동안 유지된다 (PRD 3.2).
   const [preferredLang, setPreferredLang] = useState<LanguageKey>(DEFAULT_LANGUAGE)
   const [loadingLang, setLoadingLang] = useState<LanguageKey | null>(null)
+  // 문제 검색 결과의 풀이 탭 상태 — 추천 풀이 코드만 최초 응답에 오고, 나머지 풀이는 그
+  // 탭을 열 때 그때그때 요청한다(언어 탭과 동일한 온디맨드 패턴).
+  const [activeSolutionIndex, setActiveSolutionIndex] = useState(0)
+  const [loadingSolutionIndex, setLoadingSolutionIndex] = useState<number | null>(
+    null,
+  )
 
   const [inputError, setInputError] = useState<InputError | null>(null)
   const [isOffline, setIsOffline] = useState(false)
@@ -210,6 +216,54 @@ export default function Home() {
     }
   }
 
+  // 풀이 하나의 예시 코드를 요청한다 — 최초 추천 풀이 코드가 없거나(부분 파싱 실패 등),
+  // 사용자가 아직 코드를 안 받아온 다른 풀이 탭을 열었을 때 호출된다. 탭 전환 시 자동 호출과
+  // "다시 시도" 버튼 클릭이 이 함수 하나로 처리된다 (fetchLanguageCode와 동일한 패턴).
+  async function fetchSolutionCode(index: number) {
+    if (!problemResult || loadingSolutionIndex !== null) return
+    const solution = problemResult.solutions[index]
+    if (!solution) return
+    setLoadingSolutionIndex(index)
+    try {
+      const res = await fetch('/api/problem/code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          problem: problemResult.problem,
+          algorithmId: solution.algorithmId,
+          label: solution.label,
+          explanation: solution.explanation,
+        }),
+      })
+      if (!res.ok) return
+      const data = (await res.json()) as { code: string }
+      setProblemResult((prev) =>
+        prev
+          ? {
+              ...prev,
+              solutions: prev.solutions.map((s, i) =>
+                i === index ? { ...s, code: data.code } : s,
+              ),
+            }
+          : prev,
+      )
+    } finally {
+      setLoadingSolutionIndex(null)
+    }
+  }
+
+  // 활성 풀이 탭에 코드가 없으면 자동으로 요청한다 — 최초 로드된 추천 풀이든, 사용자가 막
+  // 옮겨간 다른 풀이 탭이든 동일하게 처리된다. 실패 후에는 재요청하지 않고(무한 재시도 방지)
+  // "다시 시도" 버튼(onRetrySolution)으로만 다시 시도한다.
+  useEffect(() => {
+    if (!problemResult) return
+    const solution = problemResult.solutions[activeSolutionIndex]
+    if (solution && solution.code === null && loadingSolutionIndex === null) {
+      fetchSolutionCode(activeSolutionIndex)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [problemResult, activeSolutionIndex])
+
   async function runProblemFetch(description: string) {
     lastAction.current = () => runProblemFetch(description)
     setInputError(null)
@@ -248,6 +302,8 @@ export default function Home() {
       }
       const data = (await res.json()) as ProblemResultData
       setProblemResult(data)
+      const recommendedIdx = data.solutions.findIndex((s) => s.recommended)
+      setActiveSolutionIndex(recommendedIdx === -1 ? 0 : recommendedIdx)
       setRequestPhase('success')
     } catch {
       setRequestPhase(didTimeout ? 'timeout' : 'server-error')
@@ -525,6 +581,10 @@ export default function Home() {
               ) : problemResult ? (
                 <ProblemResult
                   result={problemResult}
+                  activeSolutionIndex={activeSolutionIndex}
+                  onChangeSolutionIndex={setActiveSolutionIndex}
+                  retryingSolution={loadingSolutionIndex}
+                  onRetrySolution={fetchSolutionCode}
                   onGoToAlgorithm={(id) => goToAlgorithm(id)}
                 />
               ) : (

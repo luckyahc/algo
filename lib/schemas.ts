@@ -1,8 +1,24 @@
 import { z } from 'zod'
 import type { AlgorithmCategory } from '@/lib/algorithm-catalog'
 
-export const DIFFICULTIES = ['하', '중', '상'] as const
-export type Difficulty = (typeof DIFFICULTIES)[number]
+// 1(가장 쉬움) ~ 10(카탈로그에서 가장 어려운 알고리즘 수준)의 10단계 난이도.
+// 기준 문구는 lib/ai.ts의 DIFFICULTY_SCALE_PROMPT 참고 — 두 라우트가 이 문구를 공유해
+// 같은 기준으로 채점하도록 한다.
+export const DIFFICULTY_MIN = 1
+export const DIFFICULTY_MAX = 10
+export const DifficultySchema = z
+  .number()
+  .int()
+  .min(DIFFICULTY_MIN)
+  .max(DIFFICULTY_MAX)
+export type Difficulty = z.infer<typeof DifficultySchema>
+
+// 5.7(부분 파싱) 경로로 살아남은 값이나 모델이 드물게 범위를 벗어나게 준 값을 방어적으로
+// 1~10 안으로 눌러 담는다. 두 라우트(app/api/algorithm, app/api/problem)가 공유한다.
+export function clampDifficulty(value: number | undefined): Difficulty | null {
+  if (value === undefined || Number.isNaN(value)) return null
+  return Math.min(DIFFICULTY_MAX, Math.max(DIFFICULTY_MIN, Math.round(value)))
+}
 
 export const LANGUAGES = ['c', 'cpp', 'java', 'python'] as const
 export type LanguageKey = (typeof LANGUAGES)[number]
@@ -31,7 +47,7 @@ export const AlgorithmCodeSchema = z.object({
 // 열 때 /api/algorithm/code로 그때그때 요청한다.
 export const AlgorithmDetailSchema = z.object({
   description: z.string().min(1),
-  difficulty: z.enum(DIFFICULTIES),
+  difficulty: DifficultySchema,
   difficultyReason: z.string().min(1),
   useCases: z.array(z.string().min(1)).min(1),
   code: z.string().min(1), // 기본 언어(C++) 코드
@@ -60,16 +76,20 @@ export type AlgorithmResultData = {
   related: string[]
 }
 
+// code는 추천 풀이(recommended:true) 하나에만 채워서 최초 응답을 가볍게 유지하고,
+// 나머지 풀이의 code는 null로 두었다가 사용자가 그 풀이 탭을 열 때 /api/problem/code로
+// 그때그때 요청한다 (PRD 5.19와 동일한 온디맨드 패턴, algorithm 코드 필드 참고).
 export const ProblemSolutionSchema = z.object({
   algorithmId: z.string(),
   label: z.string().min(1),
   explanation: z.string().min(1),
   timeComplexity: z.string().min(1),
   recommended: z.boolean(),
+  code: z.string().nullable(),
 })
 
 export const ProblemAnalysisSchema = z.object({
-  difficulty: z.enum(DIFFICULTIES),
+  difficulty: DifficultySchema,
   difficultyReason: z.string().min(1),
   matched: z.boolean(),
   solutions: z.array(ProblemSolutionSchema).max(5),

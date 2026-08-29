@@ -1,7 +1,7 @@
 import { ALGORITHM_CATALOG } from '@/lib/algorithm-catalog'
-import { CATALOG_ID_LIST, generatePartialSafe } from '@/lib/ai'
+import { CATALOG_ID_LIST, DIFFICULTY_SCALE_PROMPT, generatePartialSafe } from '@/lib/ai'
 import { MAX_PROBLEM_LENGTH } from '@/lib/request-timing'
-import { ProblemAnalysisSchema } from '@/lib/schemas'
+import { clampDifficulty, ProblemAnalysisSchema } from '@/lib/schemas'
 import { hasMeaningfulContent } from '@/lib/validation'
 
 export const runtime = 'nodejs'
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
 문제: ${trimmed}
 
 작성 지침:
-- difficulty: 학부 알고리즘 수업/코딩테스트 기준으로 "하", "중", "상" 중 하나를 판단한다.
+- ${DIFFICULTY_SCALE_PROMPT}
 - difficultyReason: 그 난이도로 판단한 근거를 2~3문장으로 설명한다.
 - matched: 이 문제가 아래 카탈로그의 알고리즘 중 하나 이상으로 명확히 풀 수 있으면 true, 문제 자체가 불명확하거나 특정 알고리즘과 뚜렷하게 연결되지 않으면 false로 판단한다.
 - solutions: matched가 true일 때만 채운다. 서로 다른 풀이 방법이 여러 개 있으면(예: 그리디 vs DP) 최대 5개까지 모두 적되, 각 풀이마다 다음을 포함한다.
@@ -65,6 +65,7 @@ export async function POST(request: Request) {
   - explanation: 문제의 어느 부분이 이 알고리즘을 써야 함을 암시하는지 구체적으로 설명한다.
   - timeComplexity: 예) "O(N log N)"
   - recommended: 가장 효율적이거나 널리 쓰이는 풀이 하나에만 true를 준다(나머지는 false).
+  - code: recommended가 true인 풀이 딱 하나에만, 그 알고리즘으로 이 문제를 실제로 푸는 실행 가능한 C++ 코드를 작성한다(핵심 로직에 짧은 한국어 주석 포함, 코드 외 설명 금지). 나머지 풀이는 code를 null로 둔다.
 - matched가 false이면 solutions는 빈 배열로 둔다.
 
 카탈로그 id 목록:
@@ -101,7 +102,7 @@ ${CATALOG_ID_LIST}`,
 
   return Response.json({
     problem: trimmed,
-    difficulty: data.difficulty ?? null,
+    difficulty: clampDifficulty(data.difficulty),
     difficultyReason: data.difficultyReason ?? null,
     matched,
     solutions,

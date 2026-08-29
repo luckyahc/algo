@@ -3,8 +3,13 @@ import {
   findClosestEntries,
   findExactMatch,
 } from '@/lib/algorithm-catalog'
-import { CATALOG_ID_LIST, generatePartialSafe } from '@/lib/ai'
-import { AlgorithmDetailSchema, DEFAULT_LANGUAGE, LANGUAGE_LABELS } from '@/lib/schemas'
+import { CATALOG_ID_LIST, DIFFICULTY_SCALE_PROMPT, generatePartialSafe } from '@/lib/ai'
+import {
+  AlgorithmDetailSchema,
+  clampDifficulty,
+  DEFAULT_LANGUAGE,
+  LANGUAGE_LABELS,
+} from '@/lib/schemas'
 
 export const runtime = 'nodejs'
 
@@ -53,7 +58,7 @@ export async function POST(request: Request) {
 
 작성 지침:
 - description: 이 알고리즘의 동작 원리를 다른 알고리즘과 혼동되지 않을 만큼 구체적으로 3~5문장으로 설명한다.
-- difficulty: 학부 알고리즘 수업/코딩테스트 기준으로 "하", "중", "상" 중 하나를 판단한다.
+- ${DIFFICULTY_SCALE_PROMPT}
 - difficultyReason: 그 난이도로 판단한 근거를 2~3문장으로 설명한다.
 - useCases: 이 알고리즘이 실제로 적용되는 문제 유형을 3~5개 나열한다.
 - code: ${LANGUAGE_LABELS[DEFAULT_LANGUAGE]}로 이 알고리즘을 구현한 예시 코드 하나만 작성한다. 그대로 컴파일/실행 가능한 수준이어야 하며, 핵심 로직에 짧은 한국어 주석을 단다.
@@ -88,7 +93,7 @@ ${CATALOG_ID_LIST}`,
     name: entry.name,
     category: entry.category,
     description: data.description ?? null,
-    difficulty: data.difficulty ?? null,
+    difficulty: clampDifficulty(data.difficulty),
     difficultyReason: data.difficultyReason ?? null,
     useCases: data.useCases ?? null,
     // 언어 4개를 한 번에 요청하지 않는다 — 기본 언어(C++)만 채우고 나머지는 사용자가

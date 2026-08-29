@@ -85,6 +85,29 @@
   --hard: oklch(0.95 0.04 20);
   --hard-foreground: oklch(0.54 0.19 25);
 
+  /* 난이도 10단계 배지용 그라데이션(초록 155도 → 빨강 20도). --diff-N-bg/-fg 형태로
+     10단계 전용이며 위 easy/medium/hard(3단계, 기존 다른 배지용)와는 별개다. */
+  --diff-1-bg: oklch(0.945 0.055 155);
+  --diff-1-fg: oklch(0.45 0.12 155);
+  --diff-2-bg: oklch(0.945 0.055 140);
+  --diff-2-fg: oklch(0.46 0.128 140);
+  --diff-3-bg: oklch(0.945 0.055 125);
+  --diff-3-fg: oklch(0.47 0.136 125);
+  --diff-4-bg: oklch(0.945 0.055 110);
+  --diff-4-fg: oklch(0.48 0.143 110);
+  --diff-5-bg: oklch(0.945 0.055 95);
+  --diff-5-fg: oklch(0.49 0.151 95);
+  --diff-6-bg: oklch(0.945 0.055 80);
+  --diff-6-fg: oklch(0.5 0.159 80);
+  --diff-7-bg: oklch(0.945 0.055 65);
+  --diff-7-fg: oklch(0.51 0.167 65);
+  --diff-8-bg: oklch(0.945 0.055 50);
+  --diff-8-fg: oklch(0.52 0.174 50);
+  --diff-9-bg: oklch(0.945 0.055 35);
+  --diff-9-fg: oklch(0.53 0.182 35);
+  --diff-10-bg: oklch(0.945 0.055 20);
+  --diff-10-fg: oklch(0.54 0.19 20);
+
   --code-bg: oklch(0.24 0.02 264);
   --code-fg: oklch(0.9 0.01 250);
   --code-keyword: oklch(0.78 0.13 300);
@@ -132,6 +155,28 @@
   --medium-foreground: oklch(0.85 0.13 82);
   --hard: oklch(0.33 0.09 22);
   --hard-foreground: oklch(0.82 0.15 25);
+
+  /* 난이도 10단계 배지용 그라데이션(다크 모드) — 라이트 모드와 동일한 hue 진행, L/C만 다르다. */
+  --diff-1-bg: oklch(0.33 0.08 155);
+  --diff-1-fg: oklch(0.83 0.145 155);
+  --diff-2-bg: oklch(0.33 0.08 140);
+  --diff-2-fg: oklch(0.83 0.145 140);
+  --diff-3-bg: oklch(0.33 0.08 125);
+  --diff-3-fg: oklch(0.83 0.145 125);
+  --diff-4-bg: oklch(0.33 0.08 110);
+  --diff-4-fg: oklch(0.83 0.145 110);
+  --diff-5-bg: oklch(0.33 0.08 95);
+  --diff-5-fg: oklch(0.83 0.145 95);
+  --diff-6-bg: oklch(0.33 0.08 80);
+  --diff-6-fg: oklch(0.83 0.145 80);
+  --diff-7-bg: oklch(0.33 0.08 65);
+  --diff-7-fg: oklch(0.83 0.145 65);
+  --diff-8-bg: oklch(0.33 0.08 50);
+  --diff-8-fg: oklch(0.83 0.145 50);
+  --diff-9-bg: oklch(0.33 0.08 35);
+  --diff-9-fg: oklch(0.83 0.145 35);
+  --diff-10-bg: oklch(0.33 0.08 20);
+  --diff-10-fg: oklch(0.83 0.145 20);
 
   --code-bg: oklch(0.15 0.014 264);
   --code-fg: oklch(0.9 0.01 250);

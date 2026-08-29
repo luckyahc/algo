@@ -185,3 +185,33 @@
 - [x] 실제 검증: `/api/algorithm`(이진 탐색) 최초 요청 **14.1초**로 완료, `code` 필드에 `cpp`만 채워지고 나머지 3개 언어는 `null`로 정확히 내려옴 확인. `/api/algorithm/code`(binary-search, python) 온디맨드 요청도 **21.0초**로 정상 완료 확인
 
 **완료 기준**: 최초 알고리즘 검색이 눈에 띄게 빨라지고(4개 언어 → 1개 언어 생성), 다른 언어 탭을 열면 자동으로 그 언어만 요청되며, 실패 시에만 재시도 버튼이 뜬다. **검증됨** — 위 실측치가 이를 뒷받침한다.
+
+## Sprint 10 — 문제 검색 결과에 예시 코드 추가 (신규, 2026-08-29)
+
+**배경**: 사용자 요청 — "문제 검색 부분에 리스트에 없는 알고리즘을 넣어도 잘 설명해줘서 좋다. 하지만 문제를 넣거나 리스트에 없는 알고리즘을 넣어도 코드 블록을 생성해줬으면 좋겠다." 기존 `/api/problem`은 풀이(`solutions`)마다 `label`/`explanation`/`timeComplexity`만 텍스트로 줬고, 실제 코드를 보려면 "알고리즘 보러가기" 버튼으로 알고리즘 탭까지 이동해야 했다(그리고 그 버튼조차 `algorithmId`가 카탈로그에 있을 때만 떴다). Sprint 9에서 확인한 교훈(여러 개를 한 번에 생성하면 응답이 느려진다)을 그대로 적용해, 매 풀이마다 코드를 생성하지 않고 추천 풀이 하나만 upfront로 생성하기로 했다.
+
+**작업**
+- [x] `lib/schemas.ts`: `ProblemSolutionSchema`에 `code: z.string().nullable()` 추가
+- [x] `app/api/problem/route.ts`: 프롬프트에 "recommended가 true인 풀이 하나에만 C++ 코드를 채우고 나머지는 null" 지침 추가
+- [x] `app/api/problem/code/route.ts` 신설: `{ problem, algorithmId, label, explanation }` → 풀이 하나의 C++ 코드만 (재)생성. 문제/풀이는 서버에 저장되지 않으므로 클라이언트가 맥락을 그대로 다시 보낸다. `algorithmId`가 카탈로그에 없으면(자유 텍스트가 카탈로그 밖 개념을 가리킬 때) `label`을 대신 프롬프트에 쓴다
+- [x] `app/page.tsx`: `activeSolutionIndex`/`loadingSolutionIndex` 상태 신설, `fetchSolutionCode` + 활성 풀이 탭에 코드가 없으면 자동 요청하는 `useEffect` 추가 (fetchLanguageCode/handleChangeLang과 동일한 온디맨드 패턴, 실패 후 자동 재시도는 안 함 — 재시도 버튼으로만)
+- [x] `components/problem-result.tsx`: 풀이 탭 활성 상태를 부모(`page.tsx`)로 끌어올리고, `CodeBlock`으로 예시 코드 섹션 추가(코드 있음/불러오는 중/실패+재시도 3단 상태, language-tabs.tsx와 동일한 UX)
+- [x] `tsc --noEmit`/`pnpm build` 통과
+- [x] 실제 검증(로컬 서버, 실제 Gemini 응답): "최대 부분 배열 합" 문제 → 추천 풀이(Kadane 알고리즘)에 C++ 코드 즉시 포함, 비추천 풀이(분할 정복)는 `code: null`로 정상 하강 확인. `/api/problem/code`로 그 비추천 풀이의 코드를 직접 요청해 정상적으로 재생성됨을 확인(200, 완결된 C++ 코드)
+
+**완료 기준**: 문제 검색 결과의 각 풀이 탭에 실행 가능한 C++ 코드 블록이 뜨고, 추천 풀이는 즉시, 나머지 풀이는 탭을 열 때 자동으로 채워진다. **검증됨** — 위 실측이 이를 뒷받침한다.
+
+## Sprint 11 — 난이도 10단계 세분화 (신규, 2026-08-29)
+
+**배경**: 사용자 요청 — "난이도를 상중하로 대충 나누지 말고 10단계로 나눠줘. 10단계의 기준은 현재까지 나온 알고리즘 중 최악의 난이도를 기준으로 해줘." PRD도 "예: 하/중/상 또는 별점"으로 예시일 뿐 강제 사항이 아니었어서(PRD.md 71/80행) 척도 자체를 바꾸는 데 문제가 없었다.
+
+**작업**
+- [x] `lib/schemas.ts`: `DIFFICULTIES`(3단계 문자열 enum) → `DifficultySchema = z.number().int().min(1).max(10)`로 교체, `clampDifficulty()` 헬퍼 추가(서버 응답 시점에 1~10으로 방어적 클램프)
+- [x] `lib/ai.ts`: `DIFFICULTY_SCALE_PROMPT` 신설 — `/api/algorithm`·`/api/problem` 두 라우트가 이 문구 하나를 공유해 같은 기준으로 채점하게 함. **10점을 카탈로그의 실제 최상급 항목(블라섬 알고리즘, 매트로이드 교차, 링크-컷 트리, Gomory-Hu 트리, 일반화 접미사 자동자)에 명시적으로 앵커링**하고 1~2점은 반복문 수준(선형 탐색 등)에 앵커링 — "현재까지 나온 알고리즘 중 최악의 난이도를 기준으로"라는 사용자 요청을 그대로 반영
+- [x] `app/api/algorithm/route.ts`, `app/api/problem/route.ts`: 프롬프트에서 "하/중/상" 문구를 `DIFFICULTY_SCALE_PROMPT`로 교체, 응답 병합 시 `clampDifficulty(data.difficulty)` 사용
+- [x] `app/globals.css`: `--diff-1-bg/-fg` ~ `--diff-10-bg/-fg` 10단 그라데이션(초록 155도 → 빨강 20도) CSS 변수 신설(라이트/다크 모드 각각) — 기존 3단계용 `--easy/--medium/--hard`는 그대로 두고 건드리지 않음(재사용 안 함)
+- [x] `components/difficulty-badge.tsx`: 레벨 1~10을 5개 구간(입문/초급/중급/고급/최상급)으로 묶어 짧은 티어명을 붙이고, "난이도 · 중급 (5/10)" 형태로 표시. 색상은 CSS 변수를 인라인 스타일로 직접 참조(레벨별로 10가지 색 전부 표현)
+- [x] `tsc --noEmit`/`pnpm build` 통과
+- [x] 실제 검증(로컬 서버, 실제 Gemini 응답): 선형 탐색 → 난이도 1(앵커: 반복문 수준), 다익스트라 → 난이도 5(중급), 블라섬 알고리즘 → 난이도 10(앵커: 카탈로그 최상급) — 세 앵커 모두 의도대로 작동함을 확인
+
+**완료 기준**: AI가 1~10 사이의 정수로 난이도를 매기고, 카탈로그의 가장 어려운 항목이 실제로 10점을 받으며, 배지가 10단계를 시각적으로 구분해 보여준다. **검증됨** — 위 3개 앵커 실측이 이를 뒷받침한다.

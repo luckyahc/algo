@@ -1,16 +1,18 @@
-import type { Difficulty } from '@/lib/schemas'
+import { DIFFICULTY_MAX, DIFFICULTY_MIN, type Difficulty } from '@/lib/schemas'
 import { cn } from '@/lib/utils'
 
-const STYLES: Record<Difficulty, string> = {
-  하: 'bg-easy text-easy-foreground',
-  중: 'bg-medium text-medium-foreground',
-  상: 'bg-hard text-hard-foreground',
-}
+// 1~10을 5개 구간으로 묶어 짧은 한글 티어명을 붙인다. 색상은 구간이 아니라 레벨 하나하나마다
+// app/globals.css의 --diff-N-bg/-fg 그라데이션(10단계, 초록→빨강)을 그대로 쓴다.
+const TIER_LABELS: [max: number, label: string][] = [
+  [2, '입문'],
+  [4, '초급'],
+  [6, '중급'],
+  [8, '고급'],
+  [10, '최상급'],
+]
 
-const LABELS: Record<Difficulty, string> = {
-  하: '난이도 · 하',
-  중: '난이도 · 중',
-  상: '난이도 · 상',
+function tierLabel(level: number): string {
+  return TIER_LABELS.find(([max]) => level <= max)?.[1] ?? '최상급'
 }
 
 export function DifficultyBadge({
@@ -35,15 +37,21 @@ export function DifficultyBadge({
     )
   }
 
+  // 방어적 클램프 — 서버가 clampDifficulty로 이미 1~10에 가두지만, 표시 직전에도 한 번 더.
+  const clamped = Math.min(DIFFICULTY_MAX, Math.max(DIFFICULTY_MIN, Math.round(level)))
+
   return (
     <span
       className={cn(
         'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold tracking-tight',
-        STYLES[level],
         className,
       )}
+      style={{
+        backgroundColor: `var(--diff-${clamped}-bg)`,
+        color: `var(--diff-${clamped}-fg)`,
+      }}
     >
-      {LABELS[level]}
+      난이도 · {tierLabel(clamped)} ({clamped}/10)
     </span>
   )
 }

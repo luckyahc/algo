@@ -1,9 +1,17 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { ArrowRight, Info, Lightbulb, Puzzle, SearchX } from 'lucide-react'
+import {
+  ArrowRight,
+  Info,
+  Lightbulb,
+  Puzzle,
+  RotateCw,
+  SearchX,
+  Sparkles,
+} from 'lucide-react'
 import { getCatalogEntry } from '@/lib/algorithm-catalog'
 import { MISSING_FIELD_PLACEHOLDER, type ProblemResultData } from '@/lib/schemas'
+import { CodeBlock } from '@/components/code-block'
 import { CopyButton } from '@/components/copy-button'
 import { ComplexityBadge, DifficultyBadge } from '@/components/difficulty-badge'
 import { cn } from '@/lib/utils'
@@ -24,28 +32,25 @@ function Card({
   )
 }
 
-function defaultSolutionIndex(result: ProblemResultData) {
-  const i = result.solutions.findIndex((s) => s.recommended)
-  return i === -1 ? 0 : i
-}
-
 export function ProblemResult({
   result,
+  activeSolutionIndex,
+  onChangeSolutionIndex,
+  retryingSolution,
+  onRetrySolution,
   onGoToAlgorithm,
 }: {
   result: ProblemResultData
+  activeSolutionIndex: number
+  onChangeSolutionIndex: (index: number) => void
+  retryingSolution: number | null
+  onRetrySolution: (index: number) => void
   onGoToAlgorithm: (algorithmId: string) => void
 }) {
-  const [activeSol, setActiveSol] = useState(() => defaultSolutionIndex(result))
-
-  // 새 검색 결과가 들어오면 추천 풀이 탭으로 다시 초기화한다.
-  useEffect(() => {
-    setActiveSol(defaultSolutionIndex(result))
-  }, [result])
-
   const hasSolution = result.matched && result.solutions.length > 0
-  const solution = hasSolution ? result.solutions[activeSol] : undefined
+  const solution = hasSolution ? result.solutions[activeSolutionIndex] : undefined
   const targetAlgo = solution ? getCatalogEntry(solution.algorithmId) : undefined
+  const isRetryingCode = retryingSolution === activeSolutionIndex
 
   return (
     <div className="flex flex-col gap-4">
@@ -99,10 +104,10 @@ export function ProblemResult({
                 <button
                   key={`${sol.algorithmId}-${i}`}
                   type="button"
-                  onClick={() => setActiveSol(i)}
+                  onClick={() => onChangeSolutionIndex(i)}
                   className={cn(
                     'flex-1 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                    i === activeSol
+                    i === activeSolutionIndex
                       ? 'bg-card text-foreground shadow-sm'
                       : 'text-muted-foreground hover:text-foreground',
                   )}
@@ -118,6 +123,40 @@ export function ProblemResult({
             <p className="text-pretty leading-relaxed text-muted-foreground">
               {solution.explanation}
             </p>
+          </div>
+
+          {/* 예시 코드 — 추천 풀이는 최초 응답에 딸려 오고, 나머지 풀이는 이 탭을
+              열 때 그때그때 요청한다 (PRD 5.19와 동일한 패턴). */}
+          <div className="mt-5 flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="size-4 text-primary" />
+                <h4 className="text-sm font-semibold text-foreground">
+                  예시 코드 (C++)
+                </h4>
+              </div>
+              {solution.code && <CopyButton text={solution.code} label="코드" />}
+            </div>
+            {solution.code ? (
+              <CodeBlock source={solution.code} label="C++" lang="cpp" />
+            ) : isRetryingCode ? (
+              <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border bg-secondary/40 p-6 text-center text-sm text-muted-foreground">
+                <RotateCw className="size-4 animate-spin" />
+                <p>코드를 생성하는 중입니다...</p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border bg-secondary/40 p-6 text-center text-sm text-muted-foreground">
+                <p>이 풀이의 예시 코드를 불러오지 못했습니다.</p>
+                <button
+                  type="button"
+                  onClick={() => onRetrySolution(activeSolutionIndex)}
+                  className="relative inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors after:absolute after:-inset-1.5 after:content-[''] hover:bg-accent"
+                >
+                  <RotateCw className="size-3.5" />
+                  다시 시도
+                </button>
+              </div>
+            )}
           </div>
 
           {/* 알고리즘 보러가기 */}
