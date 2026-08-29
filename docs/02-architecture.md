@@ -22,13 +22,14 @@ Route Handler는 Next.js App Router 방식(`app/api/*/route.ts`)을 쓴다:
 - `POST /api/problem` — `{ description: string }` → `ProblemAnalysis`(추천 풀이 하나에만 C++ 코드 포함) **(구현됨)**
 - `POST /api/algorithm/code` — `{ algorithmId: string, lang: string }` → 언어 1개 코드만 (재)생성, 최초 검색 시 기본 언어 외 언어를 탭으로 열 때도 이 라우트를 쓴다 (5.19) **(구현됨, Sprint 3·9)**
 - `POST /api/problem/code` — `{ problem: string, algorithmId: string, label: string, explanation: string }` → 특정 풀이 하나의 C++ 코드만 (재)생성. 문제/풀이가 서버에 저장되지 않으므로 클라이언트가 맥락을 매번 그대로 다시 보낸다 **(구현됨, Sprint 10)**
+- `POST /api/difficulty` — `{ context: string }`(알고리즘 이름 또는 문제 설명) → `{ difficulty, difficultyReason }`만 (재)생성. `/api/algorithm`·`/api/problem`의 최초 응답에서 필드가 많아 `difficulty`만 개별적으로 탈락했을 때 클라이언트가 자동으로 호출한다 **(구현됨, Sprint 12)**
 
-`lib/ai.ts`에 네 라우트가 공유하는 `MODEL`(`google('gemini-3.6-flash')`, `@ai-sdk/google` 직접 호출), `CATALOG_ID_LIST`(프롬프트에 넣는 카탈로그 id 목록 문자열), `generatePartialSafe`(아래 §3.2 참고)를 모아 중복을 없앴다.
+`lib/ai.ts`에 다섯 라우트가 공유하는 `MODEL`(`google('gemini-3.6-flash')`, `@ai-sdk/google` 직접 호출), `CATALOG_ID_LIST`(프롬프트에 넣는 카탈로그 id 목록 문자열), `DIFFICULTY_SCALE_PROMPT`(난이도 10단계 채점 기준), `generatePartialSafe`(아래 §3.2 참고)를 모아 중복을 없앴다.
 
 각 라우트는:
 1. 입력 검증(빈 값, 유효 알고리즘 목록 대조, 무의미한 텍스트, 글자 수 등)을 **AI 호출 전에** 서버에서도 한 번 더 수행한다(클라이언트 검증 우회 방지). `/api/algorithm`은 빈 값은 400, 카탈로그에 없는 이름은 404 + 유사 후보를 반환하고, `/api/problem`은 빈 값·3000자 초과(`TOO_LONG`)·무의미한 텍스트(`lib/validation.ts`의 `hasMeaningfulContent`)를 모두 400으로 반환한다 — 전부 AI 호출 없이 즉시 응답한다.
 2. `generatePartialSafe`(내부적으로 `generateObject`를 감쌈)로 AI 호출, Zod 스키마로 파싱.
-3. 실패 시 에러 코드를 포함한 JSON을 반환해 프론트엔드가 5장의 상태 문구와 매핑할 수 있게 한다. 네 라우트가 실제로 반환하는 코드: `INVALID_INPUT`(400, 공통) / `NOT_FOUND`(404, `/api/algorithm`·`/api/algorithm/code`, `suggestions` 동봉은 전자만) / `MEANINGLESS_INPUT`(400, `/api/problem`만) / `TOO_LONG`(400, `/api/problem`·`/api/problem/code`) / `RATE_LIMITED`(429, Google API 429 감지 시 네 라우트 공통) / `UPSTREAM_ERROR`(502, AI 호출이 완전히 실패했을 때 — 인증 오류든 부분 파싱조차 실패했든 전부 여기로 뭉뚱그린다). 별도의 `TIMEOUT` 코드는 서버에 없다 — 타임아웃은 클라이언트가 `AbortController`로 직접 만들어내는 상태이지 서버 응답 코드가 아니기 때문이다(§4 참고).
+3. 실패 시 에러 코드를 포함한 JSON을 반환해 프론트엔드가 5장의 상태 문구와 매핑할 수 있게 한다. 다섯 라우트가 실제로 반환하는 코드: `INVALID_INPUT`(400, 공통) / `NOT_FOUND`(404, `/api/algorithm`·`/api/algorithm/code`, `suggestions` 동봉은 전자만) / `MEANINGLESS_INPUT`(400, `/api/problem`만) / `TOO_LONG`(400, `/api/problem`·`/api/problem/code`·`/api/difficulty`) / `RATE_LIMITED`(429, Google API 429 감지 시 다섯 라우트 공통) / `UPSTREAM_ERROR`(502, AI 호출이 완전히 실패했을 때 — 인증 오류든 부분 파싱조차 실패했든 전부 여기로 뭉뚱그린다). 별도의 `TIMEOUT` 코드는 서버에 없다 — 타임아웃은 클라이언트가 `AbortController`로 직접 만들어내는 상태이지 서버 응답 코드가 아니기 때문이다(§4 참고).
 
 ## 3. 데이터 스키마
 

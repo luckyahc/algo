@@ -39,6 +39,7 @@ export function ProblemResult({
   retryingSolution,
   onRetrySolution,
   onGoToAlgorithm,
+  difficultyLoading,
 }: {
   result: ProblemResultData
   activeSolutionIndex: number
@@ -46,6 +47,7 @@ export function ProblemResult({
   retryingSolution: number | null
   onRetrySolution: (index: number) => void
   onGoToAlgorithm: (algorithmId: string) => void
+  difficultyLoading?: boolean
 }) {
   const hasSolution = result.matched && result.solutions.length > 0
   const solution = hasSolution ? result.solutions[activeSolutionIndex] : undefined
@@ -71,7 +73,7 @@ export function ProblemResult({
       {/* 2. 난이도 */}
       <Card>
         <div className="flex flex-col gap-3">
-          <DifficultyBadge level={result.difficulty} />
+          <DifficultyBadge level={result.difficulty} loading={difficultyLoading} />
           <div className="flex items-start gap-2 text-sm leading-relaxed text-muted-foreground">
             <Info className="mt-0.5 size-4 shrink-0 text-primary" />
             <p className="text-pretty">

@@ -34,6 +34,7 @@ export function AlgorithmResult({
   onSelectRelated,
   retryingLang,
   onRetryLang,
+  difficultyLoading,
 }: {
   algo: AlgorithmResultData
   activeLang: LanguageKey
@@ -41,6 +42,7 @@ export function AlgorithmResult({
   onSelectRelated: (id: string, rawName: string) => void
   retryingLang: LanguageKey | null
   onRetryLang: (lang: LanguageKey) => void
+  difficultyLoading?: boolean
 }) {
   // 자기 자신을 가리키는 관련 알고리즘은 화면에 만들지 않는다 (PRD 5.10) — 서버에서도
   // 걸러내지만, 방어적으로 한 번 더 제거한다.
@@ -77,7 +79,7 @@ export function AlgorithmResult({
       {/* 2. 난이도 */}
       <Card>
         <div className="flex flex-col gap-3">
-          <DifficultyBadge level={algo.difficulty} />
+          <DifficultyBadge level={algo.difficulty} loading={difficultyLoading} />
           <div className="flex items-start gap-2 text-sm leading-relaxed text-muted-foreground">
             <Info className="mt-0.5 size-4 shrink-0 text-primary" />
             <p className="text-pretty">

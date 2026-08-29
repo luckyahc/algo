@@ -17,13 +17,31 @@ function tierLabel(level: number): string {
 
 export function DifficultyBadge({
   level,
+  loading,
   className,
 }: {
   level: Difficulty | null
+  // 최초 응답에서 난이도만 빠졌을 때 /api/difficulty로 조용히 자동 재요청하는 동안 true.
+  // "정보 없음"으로 단정짓지 않고 확인 중임을 보여준다 — 거의 항상 채워지고 끝난다.
+  loading?: boolean
   className?: string
 }) {
-  // PRD 5.7: 난이도 필드가 파싱에 실패하면 null로 내려온다 — 카드 전체를 죽이지 않고
-  // 이 배지만 "준비되지 않음" 상태로 보여준다.
+  if (loading) {
+    return (
+      <span
+        className={cn(
+          'inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold tracking-tight text-muted-foreground',
+          className,
+        )}
+      >
+        <span className="size-1.5 animate-pulse rounded-full bg-muted-foreground" aria-hidden />
+        난이도 확인 중...
+      </span>
+    )
+  }
+
+  // PRD 5.7: 난이도 필드가 파싱에 실패하면 null로 내려온다. 자동 재요청(loading)까지 실패한
+  // 경우에만 여기로 와서 카드 전체를 죽이지 않고 이 배지만 "준비되지 않음" 상태로 보여준다.
   if (level === null) {
     return (
       <span

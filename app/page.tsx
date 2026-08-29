@@ -69,6 +69,9 @@ export default function Home() {
   const [loadingSolutionIndex, setLoadingSolutionIndex] = useState<number | null>(
     null,
   )
+  // 난이도만 따로 재요청하는 중인지 — 필드가 많은 최초 응답에서는 난이도만 개별적으로
+  // 누락되는 경우가 있어(5.7), 성공했는데 difficulty만 없으면 자동으로 조용히 다시 채운다.
+  const [loadingDifficulty, setLoadingDifficulty] = useState(false)
 
   const [inputError, setInputError] = useState<InputError | null>(null)
   const [isOffline, setIsOffline] = useState(false)
@@ -104,6 +107,31 @@ export default function Home() {
     if (inputError) setInputError(null)
   }
 
+  // 난이도가 null로 온 결과를 자동으로 한 번 더 채운다 — /api/difficulty는 필드 2개짜리라
+  // 실패 표면이 훨씬 작다. algoResult/problemResult 둘 다 이 함수 하나를 공유한다.
+  async function fetchDifficulty(
+    context: string,
+    apply: (difficulty: number, reason: string) => void,
+  ) {
+    if (loadingDifficulty) return
+    setLoadingDifficulty(true)
+    try {
+      const res = await fetch('/api/difficulty', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ context }),
+      })
+      if (!res.ok) return
+      const data = (await res.json()) as {
+        difficulty: number
+        difficultyReason: string
+      }
+      apply(data.difficulty, data.difficultyReason)
+    } finally {
+      setLoadingDifficulty(false)
+    }
+  }
+
   async function runAlgorithmFetch(entry: CatalogEntry) {
     lastAction.current = () => runAlgorithmFetch(entry)
     setInputError(null)
@@ -137,6 +165,15 @@ export default function Home() {
       const data = (await res.json()) as AlgorithmResultData
       setAlgoResult(data)
       setRequestPhase('success')
+      if (data.difficulty === null) {
+        fetchDifficulty(entry.name, (difficulty, reason) => {
+          setAlgoResult((prev) =>
+            prev && prev.id === data.id
+              ? { ...prev, difficulty, difficultyReason: reason }
+              : prev,
+          )
+        })
+      }
     } catch {
       setRequestPhase(didTimeout ? 'timeout' : 'server-error')
     } finally {
@@ -305,6 +342,15 @@ export default function Home() {
       const recommendedIdx = data.solutions.findIndex((s) => s.recommended)
       setActiveSolutionIndex(recommendedIdx === -1 ? 0 : recommendedIdx)
       setRequestPhase('success')
+      if (data.difficulty === null) {
+        fetchDifficulty(description, (difficulty, reason) => {
+          setProblemResult((prev) =>
+            prev && prev.problem === data.problem
+              ? { ...prev, difficulty, difficultyReason: reason }
+              : prev,
+          )
+        })
+      }
     } catch {
       setRequestPhase(didTimeout ? 'timeout' : 'server-error')
     } finally {
@@ -574,6 +620,7 @@ export default function Home() {
                     onSelectRelated={goToAlgorithm}
                     retryingLang={loadingLang}
                     onRetryLang={fetchLanguageCode}
+                    difficultyLoading={loadingDifficulty && algoResult.difficulty === null}
                   />
                 ) : (
                   <IdleState />
@@ -586,6 +633,7 @@ export default function Home() {
                   retryingSolution={loadingSolutionIndex}
                   onRetrySolution={fetchSolutionCode}
                   onGoToAlgorithm={(id) => goToAlgorithm(id)}
+                  difficultyLoading={loadingDifficulty && problemResult.difficulty === null}
                 />
               ) : (
                 <IdleState />
